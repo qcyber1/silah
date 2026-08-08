@@ -57,14 +57,27 @@ function arDays(n) {
   return `${n} يومًا`;
 }
 
-/* «صلة / صلتان / صلات» */
-function arSilat(n) {
-  if (n === 0) return 'لا صلات';
-  if (n === 1) return 'صلة واحدة';
-  if (n === 2) return 'صلتان';
-  if (n <= 10) return `${n} صلات`;
-  return `${n} صلة`;
+/* الجمع العربي: صفر / مفرد / مثنى / جمع قلة (٣-١٠) / تمييز مفرد منصوب (١١+) */
+function arCount(n, { zero, one, two, few, many }) {
+  if (n === 0) return zero;
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
 }
+
+const arSilat = n => arCount(n, {
+  zero: 'لا صلات', one: 'صلة واحدة', two: 'صلتان', few: 'صلات', many: 'صلة'
+});
+const arLogs = n => arCount(n, {
+  zero: 'لا تسجيلات', one: 'تسجيل واحد', two: 'تسجيلان', few: 'تسجيلات', many: 'تسجيلًا'
+});
+const arMeets = n => arCount(n, {
+  zero: 'لا لمّات', one: 'لمّة واحدة', two: 'لمّتان', few: 'لمّات', many: 'لمّة'
+});
+const arPeople = n => arCount(n, {
+  zero: 'لا أحد', one: 'قريب واحد', two: 'قريبان', few: 'أقارب', many: 'قريبًا'
+});
 
 function cadenceText(d) {
   if (d === 1) return 'يوميًا';
@@ -83,6 +96,24 @@ function initials(n) {
     .filter(w => /^[ء-يA-Za-z]/.test(w));
   if (!words.length) return '؟';
   return words.slice(0, 2).map(w => w[0]).join('');
+}
+
+/* حلقة الدورة: تُظهر كم انقضى من دورة الصلة، لا مجرد اللون.
+   ممتلئة = حان الموعد · متجاوزة = تتحول إلى حلقة كاملة بنبضة خفيفة. */
+function avatarRing(p, s, size = 52) {
+  const meta = S.STATE_META[s.state];
+  const r = (size - 5) / 2;
+  const circ = 2 * Math.PI * r;
+  const pct = Math.max(0.04, Math.min(1, s.ratio));
+  const inner = size - 12;
+  return `<span class="ring" style="--rc:${meta.color};width:${size}px;height:${size}px">
+    <svg viewBox="0 0 ${size} ${size}" aria-hidden="true">
+      <circle class="ring-bg" cx="${size / 2}" cy="${size / 2}" r="${r}"></circle>
+      <circle class="ring-fg" cx="${size / 2}" cy="${size / 2}" r="${r}"
+        stroke-dasharray="${(circ * pct).toFixed(1)} ${circ.toFixed(1)}"></circle>
+    </svg>
+    <span class="avatar" style="--av:${avatarColor(p.id)};width:${inner}px;height:${inner}px;font-size:${Math.round(inner / 2.9)}px">${esc(initials(p.name))}</span>
+  </span>`;
 }
 
 function avatarColor(id) {
@@ -291,12 +322,12 @@ function suggestionCard(p, s) {
 
   c.innerHTML = `
     <div class="sug-head">
-      <div class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+      ${avatarRing(p, s, 56)}
       <div class="pc-main">
         <div class="pc-name">${esc(p.name)}</div>
         <div class="pc-rel">${esc(rel.label || '')}${p.city ? ' · ' + esc(p.city) : ''}</div>
       </div>
-      <div style="font-size:22px">${meta.dot}</div>
+      <div class="sug-over">${s.ratio > 1 ? '×' + s.ratio.toFixed(1) : ''}</div>
     </div>
     <div class="sug-reason">${esc(reason)}</div>
     <div class="sug-actions">
@@ -557,11 +588,11 @@ function personCard(p, s) {
   const b = el('button', 'pcard');
   b.style.setProperty('--st', meta.color);
   b.innerHTML = `
-    <div class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+    ${avatarRing(p, s, 50)}
     <div class="pc-main">
       <div class="pc-name">${esc(p.name)} <span class="pc-side" style="--sidebg:${side.color}1f;--sidec:${side.color}">${esc(side.short)}</span></div>
       <div class="pc-rel">${esc(rel.label || '')}</div>
-      <div class="pc-meta">${meta.dot} ${esc(s.last ? R.ACTION_MAP[s.last.type]?.label + ' ' + agoText(s.days) : s.label)}</div>
+      <div class="pc-meta">${esc(s.last ? R.ACTION_MAP[s.last.type]?.label + ' ' + agoText(s.days) : s.label)}</div>
     </div>
     <span class="pc-go">‹</span>`;
   b.onclick = () => go('person', p.id);
@@ -693,10 +724,63 @@ function viewPerson(v, id) {
 
   const del = el('button', 'btn btn-danger btn-block', '🗑 حذف هذا القريب');
   del.style.marginTop = '18px';
-  del.onclick = () => {
-    if (confirm(`حذف «${p.name}» وكل سجلّه؟ لا يمكن التراجع.`)) { S.deletePerson(p.id); toast('تم الحذف'); go('people'); }
-  };
+  del.onclick = () => confirmSheet({
+    title: `حذف «${p.name}»؟`,
+    body: evs.length
+      ? `سيُحذف معه <b>${esc(arLogs(evs.length))}</b> للصلة. لا يمكن التراجع عن هذا.`
+      : 'لا يوجد له سجل صلة. لا يمكن التراجع عن الحذف.',
+    confirm: '🗑 نعم، احذفه',
+    cancel: 'أبقِه',
+    danger: true,
+    onConfirm: () => { S.deletePerson(p.id); toast('تم الحذف'); go('people'); }
+  });
   v.appendChild(del);
+}
+
+/* ── ورقة تأكيد — بديل confirm() ───────────────────
+   كل زر يقول ما سيحدث، ولا يوجد زر يعني شيئًا آخر غير اسمه. */
+function confirmSheet({ title, body, confirm, cancel = 'إلغاء', danger, onConfirm }) {
+  openSheet(`
+    <h3>${esc(title)}</h3>
+    ${body ? `<p class="sheet-sub">${body}</p>` : ''}
+    <button class="btn ${danger ? 'btn-danger-solid' : 'btn-primary'} btn-lg" id="c-yes">${esc(confirm)}</button>
+    <button class="btn btn-ghost btn-block" id="c-no" style="margin-top:9px">${esc(cancel)}</button>`,
+    b => {
+      b.querySelector('#c-yes').onclick = () => { closeSheet(); onConfirm(); };
+      b.querySelector('#c-no').onclick = closeSheet;
+    });
+}
+
+/* ── ورقة فشل — تقول السبب والخطوة التالية ────────── */
+function failSheet(reason) {
+  openSheet(`
+    <h3>تعذّر إتمام العملية</h3>
+    <p class="sheet-sub">${esc(reason)}</p>
+    <div class="card muted" style="margin-bottom:13px">
+      تأكّد أنك اخترت ملفًا صدَّرته «صِلة» نفسها — ينتهي اسمه بـ <code dir="ltr">.json</code> ويبدأ بـ «صلة-نسخة».
+    </div>
+    <button class="btn btn-primary btn-lg" data-close>حسنًا</button>`);
+}
+
+/* ── ورقة خيارات — لمّا يكون القرار ثلاثيًا ───────── */
+function optionSheet({ title, body, options }) {
+  openSheet(`
+    <h3>${esc(title)}</h3>
+    ${body ? `<p class="sheet-sub">${body}</p>` : ''}
+    <div class="optlist">
+      ${options.map((o, i) => `
+        <button class="opt${o.danger ? ' danger' : ''}" data-i="${i}">
+          <span class="opt-e">${o.icon}</span>
+          <span class="opt-t">${esc(o.label)}<span>${esc(o.desc)}</span></span>
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-block" id="o-cancel" style="margin-top:11px">إلغاء</button>`,
+    b => {
+      b.querySelectorAll('[data-i]').forEach(el => el.onclick = () => {
+        closeSheet(); options[Number(el.dataset.i)].run();
+      });
+      b.querySelector('#o-cancel').onclick = closeSheet;
+    });
 }
 
 /* ── ورقة تسجيل سريعة ─────────────────────────────── */
@@ -909,8 +993,7 @@ function viewTree(v) {
       const meta = S.STATE_META[s.state];
       const n = el('button', 'tnode');
       n.style.setProperty('--st', meta.color);
-      n.innerHTML = `<span class="tnode-dot"></span>
-        <div class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+      n.innerHTML = `<div class="tnode-av">${avatarRing(p, s, 44)}</div>
         <div class="tnode-name">${esc(p.name)}</div>
         <div class="tnode-rel">${esc(r.label)}</div>`;
       n.onclick = () => go('person', p.id);
@@ -957,10 +1040,21 @@ function viewMore(v) {
       </div>
       <button class="btn btn-ghost" data-editname>✏️</button>
     </div>`;
-  me.querySelector('[data-editname]').onclick = () => {
-    const n = prompt('اسمك:', S.db.settings.myName || '');
-    if (n !== null) { S.db.settings.myName = n.trim(); S.save(); render(); }
-  };
+  me.querySelector('[data-editname]').onclick = () => openSheet(`
+    <h3>اسمك</h3>
+    <p class="sheet-sub">يظهر في التحية وفي وسط شجرتك.</p>
+    <label class="field"><span>الاسم</span>
+      <input id="n-name" type="text" autocomplete="name" value="${esc(S.db.settings.myName || '')}" placeholder="مثال: عبدالله"></label>
+    <button class="btn btn-primary btn-lg" id="n-save">حفظ</button>`,
+    b => {
+      const inp = b.querySelector('#n-name');
+      const save = () => {
+        S.db.settings.myName = inp.value.trim(); S.save();
+        closeSheet(); toast('حُفظ الاسم'); render();
+      };
+      b.querySelector('#n-save').onclick = save;
+      inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+    });
   v.appendChild(me);
 
   const up = S.upcomingGatherings();
@@ -992,11 +1086,15 @@ function viewMore(v) {
 
   const wipe = el('button', 'btn btn-danger btn-block', '⚠️ مسح كل البيانات');
   wipe.style.marginTop = '14px';
-  wipe.onclick = () => {
-    if (confirm('سيُمسح كل شيء نهائيًا. هل صدّرت نسخة احتياطية؟')) {
-      if (confirm('تأكيد أخير — مسح كل البيانات؟')) { S.wipe(); toast('مُسحت البيانات'); boot(); }
-    }
-  };
+  wipe.onclick = () => confirmSheet({
+    title: 'مسح كل البيانات؟',
+    body: `سيُحذف <b>${esc(arPeople(st.peopleCount))}</b> و<b>${esc(arLogs(S.db.events.length))}</b> للصلة و<b>${esc(arMeets(S.db.gatherings.length))}</b> — نهائيًا وبلا رجعة.<br><br>
+           إن لم تكن صدّرت نسخة احتياطية، أغلق هذه النافذة وصدّرها أولًا.`,
+    confirm: '⚠️ امسح كل شيء',
+    cancel: 'لا، ارجع',
+    danger: true,
+    onConfirm: () => { S.wipe(); toast('مُسحت البيانات'); boot(); }
+  });
   v.appendChild(wipe);
 }
 
@@ -1278,9 +1376,14 @@ function gatheringRow(g) {
   if (q('[data-att]')) q('[data-att]').onclick = () => openAttendanceSheet(g);
   if (q('[data-invite]')) q('[data-invite]').onclick = () => shareInvite(g);
   if (q('[data-edit]')) q('[data-edit]').onclick = () => openGatheringSheet(g);
-  if (q('[data-del]')) q('[data-del]').onclick = () => {
-    if (confirm(`حذف «${g.title}»؟`)) { S.deleteGathering(g.id); toast('حُذفت'); render(); }
-  };
+  if (q('[data-del]')) q('[data-del]').onclick = () => confirmSheet({
+    title: `حذف «${g.title}»؟`,
+    body: `اللمّة يوم ${esc(fmtDate(g.date))}، و${guests.length} مدعوًّا. لن يتأثّر سجل أرحامك.`,
+    confirm: '🗑 احذف اللمّة',
+    cancel: 'أبقِها',
+    danger: true,
+    onConfirm: () => { S.deleteGathering(g.id); toast('حُذفت اللمّة'); render(); }
+  });
   return c;
 }
 
@@ -1394,9 +1497,13 @@ function openGatheringSheet(existing) {
 function openAttendanceSheet(g) {
   const guests = g.guests.map(id => S.getPerson(id)).filter(Boolean);
   if (!guests.length) {
-    if (confirm('لا يوجد مدعوّون في هذه اللمّة. هل تريد إغلاقها بدون تسجيل حضور؟')) {
-      S.recordAttendance(g.id, []); toast('أُغلقت اللمّة'); render();
-    }
+    confirmSheet({
+      title: 'لا يوجد مدعوّون',
+      body: 'هذه اللمّة بلا قائمة دعوات، فلا حضور يُسجَّل. تقدر تغلقها أو ترجع وتضيف المدعوّين.',
+      confirm: 'أغلق اللمّة',
+      cancel: 'ارجع',
+      onConfirm: () => { S.recordAttendance(g.id, []); toast('أُغلقت اللمّة'); render(); }
+    });
     return;
   }
   let came = new Set(guests.map(p => p.id));   /* الافتراض أن الجميع حضر — تُلغي الغائبين */
@@ -1484,13 +1591,43 @@ function viewBackup(v) {
   inp.type = 'file'; inp.accept = '.json,application/json'; inp.hidden = true;
   inp.onchange = async () => {
     const f = inp.files[0]; if (!f) return;
-    const mode = confirm('اضغط «موافق» لدمج الملف مع بياناتك الحالية، أو «إلغاء» لاستبدالها بالكامل.') ? 'merge' : 'replace';
-    try {
-      S.importJSON(await f.text(), mode);
-      toast('تم الاستيراد بنجاح');
-      go('today');
-    } catch (e) { alert('تعذّر قراءة الملف: ' + e.message); }
+    let text;
+    try { text = await f.text(); } catch (e) { inp.value = ''; return failSheet(e.message); }
     inp.value = '';
+
+    /* استعرض محتوى الملف قبل أي تغيير، واجعل كل خيار يقول أثره صراحةً */
+    let incoming;
+    try {
+      incoming = JSON.parse(text);
+      if (!incoming || !Array.isArray(incoming.people)) throw new Error('الملف لا يحتوي بيانات «صِلة».');
+    } catch (e) { return failSheet(e.message); }
+
+    const run = mode => {
+      try { S.importJSON(text, mode); toast('تم الاستيراد بنجاح'); go('today'); }
+      catch (e) { failSheet(e.message); }
+    };
+
+    optionSheet({
+      title: 'كيف نستورد الملف؟',
+      body: `الملف يحتوي <b>${esc(arPeople(incoming.people.length))}</b> و<b>${esc(arLogs((incoming.events || []).length))}</b>.
+             وعندك الآن <b>${esc(arPeople(S.db.people.length))}</b> و<b>${esc(arLogs(S.db.events.length))}</b>.`,
+      options: [
+        { icon: '➕', label: 'دمج مع بياناتي',
+          desc: 'يضيف الجديد ويُبقي كل ما عندك كما هو',
+          run: () => run('merge') },
+        { icon: '⚠️', label: 'استبدال بياناتي',
+          desc: `يمسح أرحامك الـ${S.db.people.length} الحاليين نهائيًا ويضع محتوى الملف مكانهم`,
+          danger: true,
+          run: () => confirmSheet({
+            title: 'تأكيد الاستبدال',
+            body: `سيُمسح <b>${S.db.people.length}</b> من أرحامك و<b>${S.db.events.length}</b> تسجيل صلة نهائيًا.`,
+            confirm: '⚠️ استبدل',
+            cancel: 'لا',
+            danger: true,
+            onConfirm: () => run('replace')
+          }) }
+      ]
+    });
   };
   lbl.appendChild(inp);
   v.appendChild(lbl);
@@ -1507,6 +1644,8 @@ function viewBackup(v) {
    ══════════════════════════════════════════════════ */
 function boot() {
   S.load();
+  S.onSaveError = () => failSheet(
+    'تعذّر حفظ التغيير — مساحة التخزين في المتصفح ممتلئة. احذف بيانات مواقع لا تحتاجها، أو صدّر نسخة احتياطية ثم امسح البيانات القديمة.');
 
   /* نسخة العرض التوضيحي: تفتح معبّأة بالنموذج مباشرة بدل شاشة الترحيب */
   if (window.SILAH_DEMO && !S.db.settings.myName && S.db.people.length === 0) {

@@ -43,11 +43,16 @@ function load() {
   return DB;
 }
 
+/* الطبقة لا تلمس DOM — تُبلّغ الواجهة عبر خطّاف تسجّله app.js */
+let onSaveError = null;
+
 function save() {
   try {
     store.set(KEY, JSON.stringify(DB));
+    return true;
   } catch (e) {
-    alert('تعذّر الحفظ — قد تكون مساحة التخزين ممتلئة.');
+    if (onSaveError) onSaveError(e);
+    return false;
   }
 }
 
@@ -367,6 +372,7 @@ function wipe() {
 window.STORE = {
   get db() { return DB; },
   get persistent() { return storageOK; },
+  set onSaveError(fn) { onSaveError = fn; },
   load, save, uid,
   addPerson, updatePerson, deletePerson, getPerson, activePeople,
   addEvent, deleteEvent, eventsOf, lastContact, lastDua,
