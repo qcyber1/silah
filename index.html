@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=5">
+<title>صِلة — رفيقك في صلة الأرحام</title>
+<meta name="description" content="منصة تساعدك على معرفة أرحامك وصلتهم: شجرة الأرحام، مؤشر حرارة الصلة، تذكير يومي، وتسجيل بضغطة واحدة.">
+<meta name="theme-color" content="#0e7a5f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="صِلة">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ══ شاشة الترحيب ══════════════════════════════════ -->
+<div id="onboard" class="onboard" hidden>
+  <div class="onboard-inner">
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="72" height="72"><use href="#logo"/></svg>
+    </div>
+    <h1 class="onboard-title">صِلة</h1>
+    <p class="onboard-sub">رفيقك اليومي في صلة الأرحام</p>
+
+    <blockquote class="onboard-quote">
+      «الرَّحِمُ مُعَلَّقَةٌ بِالْعَرْشِ تَقُولُ: مَنْ وَصَلَنِي وَصَلَهُ اللَّهُ، وَمَنْ قَطَعَنِي قَطَعَهُ اللَّهُ»
+      <cite>متفق عليه — البخاري ٥٩٨٩، مسلم ٢٥٥٥</cite>
+    </blockquote>
+
+    <label class="field">
+      <span>اسمك</span>
+      <input id="ob-name" type="text" inputmode="text" placeholder="مثال: عبدالله" autocomplete="name">
+    </label>
+    <button class="btn btn-primary btn-lg" id="ob-start">ابدأ</button>
+    <p class="onboard-note">🔒 بياناتك تُحفظ على جهازك فقط — لا حساب ولا سيرفر.</p>
+  </div>
+</div>
+
+<!-- ══ الهيكل ════════════════════════════════════════ -->
+<header class="topbar" id="topbar">
+  <div class="topbar-in">
+    <div class="tb-side" id="tb-back"></div>
+    <div class="tb-title" id="tb-title">صِلة</div>
+    <div class="tb-side tb-left" id="tb-action"></div>
+  </div>
+</header>
+
+<main id="view" class="view" role="main"></main>
+
+<nav class="tabbar" id="tabbar" role="navigation" aria-label="التنقل">
+  <button class="tab" data-route="today"  aria-label="اليوم"><span class="ti">☀️</span><span>اليوم</span></button>
+  <button class="tab" data-route="people" aria-label="أرحامي"><span class="ti">👥</span><span>أرحامي</span></button>
+  <button class="tab tab-add" data-route="add" aria-label="إضافة قريب"><span class="plus">＋</span></button>
+  <button class="tab" data-route="tree"   aria-label="الشجرة"><span class="ti">🌳</span><span>الشجرة</span></button>
+  <button class="tab" data-route="more"   aria-label="المزيد"><span class="ti">☰</span><span>المزيد</span></button>
+</nav>
+
+<!-- ورقة سفلية عامة -->
+<div class="sheet-wrap" id="sheet" hidden>
+  <div class="sheet-backdrop" data-close></div>
+  <div class="sheet" role="dialog" aria-modal="true" tabindex="-1">
+    <div class="sheet-grab" data-close></div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<!-- أيقونة SVG -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="logo" viewBox="0 0 64 64">
+    <circle cx="32" cy="12" r="7" fill="currentColor"/>
+    <circle cx="13" cy="42" r="6" fill="currentColor" opacity=".75"/>
+    <circle cx="51" cy="42" r="6" fill="currentColor" opacity=".75"/>
+    <circle cx="32" cy="54" r="5" fill="currentColor" opacity=".55"/>
+    <path d="M32 19v16M32 35 13 42M32 35l19 7M32 35v14" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </symbol>
+</svg>
+
+<script src="js/texts.js"></script>
+<script src="js/relations.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  }
+</script>
+</body>
+</html>

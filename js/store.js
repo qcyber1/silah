@@ -1,0 +1,378 @@
+/* =====================================================================
+   صِلة — طبقة التخزين والحسابات
+   التخزين محلي بالكامل (localStorage). لا يخرج أي بيان من جهازك.
+   ===================================================================== */
+
+const KEY = 'silah.v1';
+const DAY = 86400000;
+
+const DEFAULT_DB = {
+  version: 2,
+  settings: { myName: '', started: null, theme: 'auto' },
+  people: [],
+  events: [],
+  gatherings: []
+};
+
+let DB = null;
+
+/* مخزن احتياطي في الذاكرة إن مُنع التخزين المحلي (تصفّح خاص أو إطار محجوب) */
+const memStore = { data: {} };
+let storageOK = true;
+const store = {
+  get(k) { return storageOK ? localStorage.getItem(k) : memStore.data[k] ?? null; },
+  set(k, v) { if (storageOK) localStorage.setItem(k, v); else memStore.data[k] = v; }
+};
+try { localStorage.setItem('silah.probe', '1'); localStorage.removeItem('silah.probe'); }
+catch (e) { storageOK = false; }
+
+/* ── تحميل وحفظ ─────────────────────────────────────── */
+function load() {
+  try {
+    const raw = store.get(KEY);
+    DB = raw ? JSON.parse(raw) : structuredClone(DEFAULT_DB);
+  } catch (e) {
+    console.warn('تعذّر قراءة البيانات، بدأنا من جديد', e);
+    DB = structuredClone(DEFAULT_DB);
+  }
+  if (!DB.settings) DB.settings = structuredClone(DEFAULT_DB.settings);
+  if (!Array.isArray(DB.people)) DB.people = [];
+  if (!Array.isArray(DB.events)) DB.events = [];
+  if (!Array.isArray(DB.gatherings)) DB.gatherings = [];   // أُضيفت في الإصدار ٢
+  if (!DB.settings.started) DB.settings.started = new Date().toISOString();
+  return DB;
+}
+
+function save() {
+  try {
+    store.set(KEY, JSON.stringify(DB));
+  } catch (e) {
+    alert('تعذّر الحفظ — قد تكون مساحة التخزين ممتلئة.');
+  }
+}
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ── الأشخاص ───────────────────────────────────────── */
+function addPerson(data) {
+  const rel = window.REL.REL_MAP[data.relation];
+  const p = {
+    id: uid(),
+    name: (data.name || '').trim(),
+    relation: data.relation,
+    phone: (data.phone || '').trim(),
+    city: (data.city || '').trim(),
+    notes: (data.notes || '').trim(),
+    cadence: Number(data.cadence) || (rel ? rel.cadence : 30),
+    occasions: data.occasions || [],
+    createdAt: new Date().toISOString(),
+    archived: false
+  };
+  DB.people.push(p);
+  save();
+  return p;
+}
+
+function updatePerson(id, patch) {
+  const p = DB.people.find(x => x.id === id);
+  if (!p) return null;
+  Object.assign(p, patch);
+  save();
+  return p;
+}
+
+function deletePerson(id) {
+  DB.people = DB.people.filter(p => p.id !== id);
+  DB.events = DB.events.filter(e => e.personId !== id);
+  save();
+}
+
+const getPerson = id => DB.people.find(p => p.id === id) || null;
+const activePeople = () => DB.people.filter(p => !p.archived);
+
+/* ── الأحداث (تسجيل الصلة) ─────────────────────────── */
+function addEvent(personId, type, note, at) {
+  const ev = {
+    id: uid(),
+    personId,
+    type,
+    note: (note || '').trim(),
+    at: at || new Date().toISOString()
+  };
+  DB.events.push(ev);
+  save();
+  return ev;
+}
+
+function deleteEvent(id) {
+  DB.events = DB.events.filter(e => e.id !== id);
+  save();
+}
+
+const eventsOf = id =>
+  DB.events.filter(e => e.personId === id).sort((a, b) => new Date(b.at) - new Date(a.at));
+
+/* آخر تواصل فعلي (الدعاء لا يُصفّر العدّاد، لكنه يُسجَّل كحسنة) */
+function lastContact(id) {
+  const list = DB.events
+    .filter(e => e.personId === id && window.REL.ACTION_MAP[e.type]?.resets)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  return list[0] || null;
+}
+
+function lastDua(id) {
+  const list = DB.events
+    .filter(e => e.personId === id && e.type === 'dua')
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  return list[0] || null;
+}
+
+/* ── حرارة الصلة ───────────────────────────────────── */
+/*  ratio = الأيام منذ آخر تواصل ÷ الدورة المقترحة
+    ≤ 0.75  موصول (أخضر)  |  ≤ 1.25 قارب (أصفر)  |  > 1.25 منقطع (أحمر) */
+function statusOf(person) {
+  const rel = window.REL.REL_MAP[person.relation] || { tier: 3, cadence: 90 };
+  const cadence = Math.max(1, Number(person.cadence) || rel.cadence);
+  const last = lastContact(person.id);
+  const since = last ? new Date(last.at) : new Date(person.createdAt);
+  const days = Math.floor((Date.now() - since.getTime()) / DAY);
+  const ratio = days / cadence;
+
+  let state, label;
+  if (!last) {
+    state = days <= cadence ? 'new' : 'cold';
+    label = days <= cadence ? 'لم تُسجَّل صلة بعد' : 'لم تصله منذ إضافته';
+  } else if (ratio <= 0.75) {
+    state = 'warm'; label = 'موصول';
+  } else if (ratio <= 1.25) {
+    state = 'due'; label = 'قارب موعد الصلة';
+  } else {
+    state = 'cold'; label = 'يحتاج صلة';
+  }
+
+  return { state, label, days, cadence, ratio, last, tier: rel.tier };
+}
+
+const STATE_META = {
+  warm: { color: '#16a34a', bg: 'rgba(22,163,74,.12)', dot: '🟢', text: 'موصول' },
+  due:  { color: '#d97706', bg: 'rgba(217,119,6,.13)', dot: '🟡', text: 'قارب' },
+  cold: { color: '#dc2626', bg: 'rgba(220,38,38,.12)', dot: '🔴', text: 'منقطع' },
+  new:  { color: '#5b7083', bg: 'rgba(91,112,131,.12)', dot: '⚪', text: 'جديد' }
+};
+
+/* أولوية الاقتراح: كل ما زاد التأخير وعلَت درجة الرحم، صعد الترتيب */
+function priorityOf(person) {
+  const s = statusOf(person);
+  const tierWeight = { 1: 3.0, 2: 1.8, 3: 1.0 }[s.tier] || 1;
+  const overdue = Math.max(0, s.ratio - 0.75);
+  return (overdue + 0.05) * tierWeight;
+}
+
+function suggestions(limit = 3) {
+  return activePeople()
+    .map(p => ({ p, s: statusOf(p), pr: priorityOf(p) }))
+    .filter(x => x.s.state !== 'warm')
+    .sort((a, b) => b.pr - a.pr)
+    .slice(0, limit);
+}
+
+/* ── المناسبات ─────────────────────────────────────── */
+/* التواريخ تُخزَّن 'MM-DD' (سنوية) — نعيدها مع عدد الأيام المتبقية */
+function upcomingOccasions(withinDays = 14) {
+  const out = [];
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  activePeople().forEach(p => {
+    (p.occasions || []).forEach(oc => {
+      if (!oc.date) return;
+      const [mm, dd] = oc.date.split('-').map(Number);
+      if (!mm || !dd) return;
+      let next = new Date(today.getFullYear(), mm - 1, dd);
+      if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
+      const inDays = Math.round((next - today) / DAY);
+      if (inDays <= withinDays) out.push({ person: p, oc, inDays, date: next });
+    });
+  });
+  return out.sort((a, b) => a.inDays - b.inDays);
+}
+
+/* ══ اللقاءات العائلية ══════════════════════════════
+   date  : 'YYYY-MM-DD'    time : 'HH:MM' (٢٤ ساعة)
+   guests: [personId]      attended: [personId] بعد تسجيل الحضور
+   repeat: none | weekly | monthly | quarterly | yearly
+   ═════════════════════════════════════════════════ */
+const REPEATS = {
+  none:      { label: 'لا يتكرر' },
+  weekly:    { label: 'كل أسبوع' },
+  monthly:   { label: 'كل شهر' },
+  quarterly: { label: 'كل ٣ أشهر' },
+  yearly:    { label: 'كل سنة' }
+};
+
+function addGathering(d) {
+  const g = {
+    id: uid(),
+    title: (d.title || 'لمّة العائلة').trim(),
+    date: d.date,
+    time: d.time || '',
+    place: (d.place || '').trim(),
+    guests: d.guests || [],
+    attended: null,
+    repeat: d.repeat || 'none',
+    notes: (d.notes || '').trim(),
+    createdAt: new Date().toISOString()
+  };
+  DB.gatherings.push(g);
+  save();
+  return g;
+}
+
+function updateGathering(id, patch) {
+  const g = DB.gatherings.find(x => x.id === id);
+  if (!g) return null;
+  Object.assign(g, patch);
+  save();
+  return g;
+}
+
+function deleteGathering(id) {
+  DB.gatherings = DB.gatherings.filter(g => g.id !== id);
+  save();
+}
+
+const getGathering = id => DB.gatherings.find(g => g.id === id) || null;
+
+/* عدد الأيام حتى اللقاء: سالب = مضى */
+function daysUntil(dateStr) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  return Math.round((new Date(y, m - 1, d) - today) / DAY);
+}
+
+/* موعد التكرار التالي بعد تسجيل الحضور */
+function nextDate(dateStr, repeat) {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (repeat === 'weekly') dt.setDate(dt.getDate() + 7);
+  else if (repeat === 'monthly') dt.setMonth(dt.getMonth() + 1);
+  else if (repeat === 'quarterly') dt.setMonth(dt.getMonth() + 3);
+  else if (repeat === 'yearly') dt.setFullYear(dt.getFullYear() + 1);
+  else return null;
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/* اللقاءات القادمة (وما مضى منها ولم يُسجَّل حضوره بعد) */
+function upcomingGatherings() {
+  return DB.gatherings
+    .filter(g => g.attended === null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function pastGatherings() {
+  return DB.gatherings
+    .filter(g => g.attended !== null)
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/* اللقاء الذي يستحق الاهتمام الآن: مضى ولم يُسجَّل، أو قادم خلال ٣٠ يومًا */
+function activeGathering() {
+  const list = upcomingGatherings();
+  const due = list.filter(g => daysUntil(g.date) <= 0);
+  if (due.length) return due[due.length - 1];
+  return list.find(g => daysUntil(g.date) <= 30) || null;
+}
+
+/* تسجيل الحضور: زيارة واحدة لكل حاضر — ثم تقديم الموعد إن كان متكررًا */
+function recordAttendance(id, attendedIds) {
+  const g = getGathering(id);
+  if (!g) return null;
+  const at = new Date(g.date + 'T' + (g.time || '20:00')).toISOString();
+  attendedIds.forEach(pid => {
+    if (getPerson(pid)) addEvent(pid, 'visit', 'حضر: ' + g.title, at);
+  });
+  g.attended = attendedIds;
+  const next = nextDate(g.date, g.repeat);
+  if (next) {
+    addGathering({ title: g.title, date: next, time: g.time, place: g.place,
+                   guests: g.guests, repeat: g.repeat, notes: g.notes });
+  }
+  save();
+  return g;
+}
+
+/* ── إحصاءات ───────────────────────────────────────── */
+function monthStats() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const evs = DB.events.filter(e => new Date(e.at).getTime() >= start);
+  const byType = {};
+  window.REL.ACTIONS.forEach(a => (byType[a.key] = 0));
+  evs.forEach(e => { if (byType[e.type] !== undefined) byType[e.type]++; });
+  const people = activePeople();
+  const counts = { warm: 0, due: 0, cold: 0, new: 0 };
+  people.forEach(p => counts[statusOf(p).state]++);
+  return {
+    total: evs.length,
+    byType,
+    peopleCount: people.length,
+    reached: new Set(evs.map(e => e.personId)).size,
+    counts
+  };
+}
+
+function streakDays() {
+  const days = new Set(DB.events.map(e => new Date(e.at).toDateString()));
+  let n = 0;
+  const d = new Date();
+  // يُحسب اليوم إن سُجّل فيه شيء، وإلا نبدأ من الأمس
+  if (!days.has(d.toDateString())) d.setDate(d.getDate() - 1);
+  while (days.has(d.toDateString())) { n++; d.setDate(d.getDate() - 1); }
+  return n;
+}
+
+/* ── النسخ الاحتياطي ───────────────────────────────── */
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(DB, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `صلة-نسخة-${d}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importJSON(text, mode = 'replace') {
+  const data = JSON.parse(text);
+  if (!data || !Array.isArray(data.people)) throw new Error('ملف غير صالح');
+  if (mode === 'merge') {
+    const ids = new Set(DB.people.map(p => p.id));
+    data.people.forEach(p => { if (!ids.has(p.id)) DB.people.push(p); });
+    const evIds = new Set(DB.events.map(e => e.id));
+    (data.events || []).forEach(e => { if (!evIds.has(e.id)) DB.events.push(e); });
+  } else {
+    DB = Object.assign(structuredClone(DEFAULT_DB), data);
+  }
+  save();
+}
+
+function wipe() {
+  DB = structuredClone(DEFAULT_DB);
+  DB.settings.started = new Date().toISOString();
+  save();
+}
+
+window.STORE = {
+  get db() { return DB; },
+  get persistent() { return storageOK; },
+  load, save, uid,
+  addPerson, updatePerson, deletePerson, getPerson, activePeople,
+  addEvent, deleteEvent, eventsOf, lastContact, lastDua,
+  statusOf, STATE_META, priorityOf, suggestions,
+  upcomingOccasions, monthStats, streakDays,
+  REPEATS, addGathering, updateGathering, deleteGathering, getGathering,
+  daysUntil, upcomingGatherings, pastGatherings, activeGathering, recordAttendance,
+  exportJSON, importJSON, wipe
+};
