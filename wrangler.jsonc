@@ -1,0 +1,15 @@
+{
+  // موقع ثابت على Cloudflare Workers — بلا كود خادم، الأصول تُخدَم من الحافة مباشرة.
+  // (server.js لا يُستخدم هنا؛ هو لمسار Railway فقط.)
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "silah",
+  "compatibility_date": "2026-01-01",
+  "assets": {
+    "directory": "./",
+    // التطبيق صفحة واحدة تدير تنقّلها داخليًا
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
