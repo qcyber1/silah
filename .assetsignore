@@ -1,11 +1,16 @@
-# ملفات المستودع التي ليست جزءًا من التطبيق — لا تُرفع ولا تُخدَم
+# ما لا يُنشر. أي إضافة هنا تُستبعد من الرفع ومن الخدمة.
+# ⚠️ .git أولًا: بدونه يُرفع تاريخ المستودع كاملًا ويصير قابلًا للتنزيل من /.git/
+.git/
+.github/
 .claude/
 .gitignore
+.assetsignore
 README.md
 build-site.js
 server.js
 package.json
 package-lock.json
+bun.lock
 railway.json
 wrangler.jsonc
 node_modules/
