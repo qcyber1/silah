@@ -1,10 +1,10 @@
-/* بناء نسخة الاستضافة: يدمج التطبيق في مستند واحد وينسخ أصول PWA */
+﻿/* بناء نسخة الاستضافة: يدمج التطبيق في مستند واحد وينسخ أصول PWA */
 const fs = require('fs');
 const SITE = process.argv[2];
 if (!SITE) { console.error('usage: node build-site.js <site-repo-path>'); process.exit(1); }
 
 const css = fs.readFileSync('styles.css', 'utf8');
-const js = ['js/texts.js', 'js/relations.js', 'js/store.js', 'js/app.js']
+const js = ['js/texts.js', 'js/relations.js', 'js/season.js', 'js/store.js', 'js/app.js']
   .map(f => fs.readFileSync(f, 'utf8')).join('\n');
 const html = fs.readFileSync('index.html', 'utf8');
 const body = html.split('<body>')[1].split('</body>')[0].replace(/<script[\s\S]*?<\/script>/g, '').trim();
@@ -56,13 +56,10 @@ fs.mkdirSync(SITE + '/app/public/icons', { recursive: true });
 ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png']
   .forEach(f => fs.copyFileSync(f, SITE + '/app/public/' + f));
 
+/* المسارات في المصدر مطلقة أصلًا — نمرّرها كما هي بلا تكرار الشرطة */
 const manifest = JSON.parse(fs.readFileSync('manifest.webmanifest', 'utf8'));
 manifest.start_url = '/';
 manifest.scope = '/';
-manifest.icons = manifest.icons.map(i => ({ ...i, src: '/' + i.src }));
-manifest.shortcuts = manifest.shortcuts.map(s => ({
-  ...s, url: '/', icons: s.icons.map(i => ({ ...i, src: '/' + i.src }))
-}));
 fs.writeFileSync(SITE + '/app/public/manifest.webmanifest', JSON.stringify(manifest, null, 2), 'utf8');
 
 const sw = `/* صِلة — عامل الخدمة: يجعل التطبيق يعمل بدون إنترنت */

@@ -7,11 +7,14 @@ const KEY = 'silah.v1';
 const DAY = 86400000;
 
 const DEFAULT_DB = {
-  version: 2,
-  settings: { myName: '', started: null, theme: 'auto' },
+  version: 3,
+  /* seasonMode: 'auto' يكتشف الموسم من التقويم؛ أو مفتاح موسم لمعاينته يدويًا.
+     hijriOffset: تعديل ±يوم لمن يتبع رؤية محلية تختلف عن أم القرى. */
+  settings: { myName: '', started: null, theme: 'auto', seasonMode: 'auto', hijriOffset: 0 },
   people: [],
   events: [],
-  gatherings: []
+  gatherings: [],
+  greetings: {}   /* { 'eid_fitr-1448': [personId, …] } — تُصفَّر كل عام تلقائيًا */
 };
 
 let DB = null;
@@ -39,6 +42,9 @@ function load() {
   if (!Array.isArray(DB.people)) DB.people = [];
   if (!Array.isArray(DB.events)) DB.events = [];
   if (!Array.isArray(DB.gatherings)) DB.gatherings = [];   // أُضيفت في الإصدار ٢
+  if (!DB.greetings || typeof DB.greetings !== 'object') DB.greetings = {};  // الإصدار ٣
+  if (DB.settings.seasonMode === undefined) DB.settings.seasonMode = 'auto';
+  if (DB.settings.hijriOffset === undefined) DB.settings.hijriOffset = 0;
   if (!DB.settings.started) DB.settings.started = new Date().toISOString();
   return DB;
 }
@@ -307,6 +313,57 @@ function recordAttendance(id, attendedIds) {
   return g;
 }
 
+/* ══ المواسم والمعايدة ══════════════════════════════ */
+
+/* الموسم النشط: يدويًا إن اختاره المستخدم، وإلا يُكتشف من التقويم */
+function activeSeason() {
+  const S = window.SEASON;
+  if (!S) return null;
+  const mode = DB.settings.seasonMode || 'auto';
+  if (mode === 'off') return null;
+  if (mode !== 'auto') return S.SEASONS[mode] || null;
+  return S.detectSeason(DB.settings.hijriOffset || 0);
+}
+
+/* مفتاح يخصّ هذا الموسم في هذه السنة، فتُصفَّر القائمة تلقائيًا كل عام */
+function seasonKey(season) {
+  const h = window.SEASON?.hijri(new Date(), DB.settings.hijriOffset || 0);
+  return `${season.key}-${h ? h.year : new Date().getFullYear()}`;
+}
+
+const greetedList = season => DB.greetings[seasonKey(season)] || [];
+const hasGreeted = (season, personId) => greetedList(season).includes(personId);
+
+function toggleGreeted(season, personId) {
+  const k = seasonKey(season);
+  const list = DB.greetings[k] || [];
+  DB.greetings[k] = list.includes(personId)
+    ? list.filter(id => id !== personId)
+    : list.concat([personId]);
+  save();
+  return DB.greetings[k].includes(personId);
+}
+
+/* ترتيب المعايدة: من لم تُعايده أولًا، ثم آكد الأرحام، ثم الأطول انقطاعًا.
+   وضع المُعايَدين في ذيل مجموعتهم صراحةً — لولا ذلك لأعاد تسجيلُ المعايدة
+   ترتيبَهم فيقفز الصف تحت إصبع المستخدم لحظة الضغط. */
+function greetingOrder(season) {
+  const done = season ? new Set(greetedList(season)) : new Set();
+  return activePeople()
+    .map(p => ({ p, s: statusOf(p), done: done.has(p.id) }))
+    .sort((a, b) =>
+      (a.done - b.done) || (a.s.tier - b.s.tier) || (b.s.ratio - a.s.ratio));
+}
+
+/* عدد من وصلتَهم اليوم — لهدف رمضان اليومي */
+function reachedToday() {
+  const today = new Date().toDateString();
+  const ids = DB.events
+    .filter(e => new Date(e.at).toDateString() === today && window.REL.ACTION_MAP[e.type]?.resets)
+    .map(e => e.personId);
+  return new Set(ids).size;
+}
+
 /* ── إحصاءات ───────────────────────────────────────── */
 function monthStats() {
   const now = new Date();
@@ -380,5 +437,6 @@ window.STORE = {
   upcomingOccasions, monthStats, streakDays,
   REPEATS, addGathering, updateGathering, deleteGathering, getGathering,
   daysUntil, upcomingGatherings, pastGatherings, activeGathering, recordAttendance,
+  activeSeason, seasonKey, greetedList, hasGreeted, toggleGreeted, greetingOrder, reachedToday,
   exportJSON, importJSON, wipe
 };

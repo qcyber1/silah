@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
    صِلة — منطق الواجهة
    ===================================================================== */
 (function () {
@@ -214,6 +214,7 @@ function render() {
     case 'stats':   title.textContent = 'سجل الصلة';   backBtn('more'); viewStats(v); break;
     case 'occ':     title.textContent = 'المناسبات';   backBtn('more'); viewOccasions(v); break;
     case 'meets':   title.textContent = 'لقاءات العائلة'; backBtn('more'); viewGatherings(v); break;
+    case 'greet':   title.textContent = 'قائمة المعايدة'; backBtn('today'); viewGreeting(v); break;
     case 'backup':  title.textContent = 'النسخ الاحتياطي'; backBtn('more'); viewBackup(v); break;
     case 'person':  viewPerson(v, route.param); break;
     default:        viewToday(v);
@@ -257,6 +258,10 @@ function viewToday(v) {
     w.innerHTML = `<p class="muted">⚠️ <b style="color:var(--ink)">هذه معاينة فقط.</b> المتصفح هنا يمنع الحفظ، فبياناتك تضيع عند تحديث الصفحة. لاستخدامها فعليًا، شغّل النسخة الكاملة على جهازك أو استضِفها على رابطك الخاص.</p>`;
     v.appendChild(w);
   }
+
+  /* الموسم يتصدّر الشاشة — هو أهم ما في اليوم إن كان قائمًا */
+  const season = S.activeSeason();
+  if (season && S.activePeople().length) v.appendChild(seasonCard(season));
 
   const people = S.activePeople();
   if (!people.length) {
@@ -1058,7 +1063,9 @@ function viewMore(v) {
   v.appendChild(me);
 
   const up = S.upcomingGatherings();
+  const season = S.activeSeason();
   const items = [
+    ['🌙', 'وضع رمضان والعيد', season ? `نشط الآن: ${season.label}` : 'يُفعَّل تلقائيًا في موعده', 'seasonSheet'],
     ['🫂', 'لقاءات العائلة', up.length ? `القادمة: ${up[0].title} — ${countdown(S.daysUntil(up[0].date))}` : 'رتّب لمّة وادعُ أرحامك', 'meets'],
     ['📖', 'آيات وأحاديث صلة الرحم', `${T.VERSES.length} آية و${T.HADITHS.length} حديثًا من الصحيحين`, 'texts'],
     ['📊', 'سجل الصلة والإحصاءات', 'كم وصلت هذا الشهر ومن تحتاج أن تصله', 'stats'],
@@ -1070,7 +1077,7 @@ function viewMore(v) {
   items.forEach(([e, t, s, r]) => {
     const b = el('button', 'rowlink', `<span class="e">${e}</span>
       <span class="t">${esc(t)}<span class="s">${esc(s)}</span></span><span class="pc-go">‹</span>`);
-    b.onclick = () => go(r);
+    b.onclick = () => r === 'seasonSheet' ? openSeasonSheet() : go(r);
     box.appendChild(b);
   });
   v.appendChild(box);
@@ -1096,6 +1103,55 @@ function viewMore(v) {
     onConfirm: () => { S.wipe(); toast('مُسحت البيانات'); boot(); }
   });
   v.appendChild(wipe);
+}
+
+/* ── إعدادات الموسم ───────────────────────────────── */
+function openSeasonSheet() {
+  const SE = window.SEASON;
+  const h = SE.hijri(new Date(), S.db.settings.hijriOffset || 0);
+  const auto = SE.detectSeason(S.db.settings.hijriOffset || 0);
+  const mode = S.db.settings.seasonMode || 'auto';
+
+  const modes = [
+    ['auto', '🕌 تلقائي', auto ? `يكتشفه من التقويم — الآن: ${auto.label}` : 'يكتشفه من التقويم — لا موسم حاليًا'],
+    ['ramadan', '🌙 رمضان', 'معاينة وضع رمضان'],
+    ['ramadan_last10', '✨ العشر الأواخر', 'معاينة العشر الأواخر'],
+    ['eid_fitr', '🎉 عيد الفطر', 'معاينة قائمة المعايدة'],
+    ['eid_adha', '🎉 عيد الأضحى', 'معاينة قائمة المعايدة'],
+    ['off', '⚪ معطّل', 'لا تُظهر أوضاع المواسم إطلاقًا']
+  ];
+
+  openSheet(`
+    <h3>وضع رمضان والعيد</h3>
+    <p class="sheet-sub">${h ? `اليوم <b>${h.day} ${esc(SE.HIJRI_MONTHS[h.month - 1])} ${h.year}هـ</b>` : 'متصفحك لا يدعم التقويم الهجري'}</p>
+    <div class="optlist">
+      ${modes.map(([k, label, desc]) => `
+        <button class="opt${mode === k ? ' picked' : ''}" data-m="${k}">
+          <span class="opt-t">${esc(label)}<span>${esc(desc)}</span></span>
+          <span class="opt-tick">${mode === k ? '✓' : ''}</span>
+        </button>`).join('')}
+    </div>
+    <div class="field" style="margin-top:16px">
+      <span>تعديل التاريخ الهجري</span>
+      <div class="stepper">
+        <button class="step" data-off="-1">−</button>
+        <b id="off-v">${S.db.settings.hijriOffset > 0 ? '+' : ''}${S.db.settings.hijriOffset || 0}</b>
+        <button class="step" data-off="1">+</button>
+      </div>
+      <div class="hint">تقويم أم القرى قد يسبق الرؤية المحلية أو يتأخّر يومًا. عدّله ليطابق بلدك.</div>
+    </div>`,
+    b => {
+      b.querySelectorAll('[data-m]').forEach(x => x.onclick = () => {
+        S.db.settings.seasonMode = x.dataset.m; S.save();
+        closeSheet(); applySeasonTheme(); toast('حُدّث وضع الموسم'); render();
+      });
+      b.querySelectorAll('[data-off]').forEach(x => x.onclick = () => {
+        const n = Math.max(-3, Math.min(3, (S.db.settings.hijriOffset || 0) + Number(x.dataset.off)));
+        S.db.settings.hijriOffset = n; S.save();
+        b.querySelector('#off-v').textContent = (n > 0 ? '+' : '') + n;
+        applySeasonTheme();
+      });
+    });
 }
 
 /* ══════════════════════════════════════════════════
@@ -1218,6 +1274,159 @@ function viewStats(v) {
   const note = el('div', 'card muted');
   note.style.marginTop = '14px';
   note.innerHTML = '💡 هذه الأرقام لك وحدك — لا تُنشر ولا تُشارَك. اجعلها عونًا على الخير لا مباهاة.';
+  v.appendChild(note);
+}
+
+/* ══════════════════════════════════════════════════
+   المواسم — رمضان والعيد
+   ══════════════════════════════════════════════════ */
+
+/* يُطبَّق على <html> فتتبدّل لوحة الألوان كلها */
+function applySeasonTheme() {
+  const s = S.activeSeason();
+  const root = document.documentElement;
+  if (!s) { root.removeAttribute('data-season'); root.style.removeProperty('--sa'); return; }
+  root.setAttribute('data-season', s.key);
+  root.style.setProperty('--sa', s.accent);
+  root.style.setProperty('--sg1', s.grad[0]);
+  root.style.setProperty('--sg2', s.grad[1]);
+}
+
+/* بطاقة الموسم في صدر شاشة اليوم */
+function seasonCard(s) {
+  const SE = window.SEASON;
+  const sec = el('div', 'section');
+  const c = el('div', 'season');
+
+  if (s.greeting) {
+    /* ── وضع العيد: قائمة المعايدة ── */
+    const total = S.activePeople().length;
+    const done = S.greetedList(s).filter(id => S.getPerson(id)).length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    c.innerHTML = `
+      <div class="season-head"><span class="season-icon">${s.icon}</span>
+        <div><h3 class="season-title">${esc(s.title)}</h3>
+        <p class="season-blurb">${esc(s.blurb)}</p></div></div>
+      <div class="season-prog">
+        <div class="season-bar"><i style="width:${pct}%"></i></div>
+        <span>${done} من ${total} · ${pct}%</span>
+      </div>
+      <div class="season-actions">
+        <button class="btn btn-season" data-open>${done ? 'أكمل المعايدة' : 'ابدأ المعايدة'}</button>
+        <button class="btn btn-season-ghost" data-msg>✍️ نص التهنئة</button>
+      </div>`;
+    c.querySelector('[data-open]').onclick = () => go('greet');
+    c.querySelector('[data-msg]').onclick = () => shareText(SE.eidMessage('', s), 'نص التهنئة');
+  } else {
+    /* ── وضع رمضان: هدف يومي + عدّ تنازلي ── */
+    const done = S.reachedToday();
+    const goal = s.goal;
+    const pct = Math.min(100, Math.round(done / goal * 100));
+    const toEid = SE.daysUntilHijri(10, 1, S.db.settings.hijriOffset || 0);
+    c.innerHTML = `
+      <div class="season-head"><span class="season-icon">${s.icon}</span>
+        <div><h3 class="season-title">${esc(s.title)}</h3>
+        <p class="season-blurb">${esc(s.blurb)}</p></div></div>
+      <div class="season-prog">
+        <div class="season-bar"><i style="width:${pct}%"></i></div>
+        <span>${esc(s.goalText)} — ${done} من ${goal}</span>
+      </div>
+      ${done >= goal ? '<div class="season-done">✅ بلغتَ هدف اليوم. تقبّل الله.</div>' : ''}
+      <div class="season-actions">
+        <button class="btn btn-season" data-iftar>🍽️ عزيمة إفطار</button>
+        <button class="btn btn-season-ghost" data-msg>✍️ تهنئة رمضان</button>
+      </div>
+      ${toEid !== null && toEid <= 40 ? `<div class="season-foot">🌙 بقي ${esc(arDays(toEid))} على العيد</div>` : ''}`;
+    c.querySelector('[data-iftar]').onclick = () => openGatheringSheet(null, {
+      title: 'عزيمة إفطار', time: '18:15', repeat: 'none',
+      notes: 'الإفطار عند الأذان، ونصلّي المغرب جماعة بإذن الله.'
+    });
+    c.querySelector('[data-msg]').onclick = () => shareText(SE.ramadanMessage(''), 'تهنئة رمضان');
+  }
+  sec.appendChild(c);
+  return sec;
+}
+
+/* مشاركة نص عام (تهنئة، دعوة…) */
+async function shareText(text, label) {
+  try { if (navigator.share) { await navigator.share({ text }); return; } } catch (e) { return; }
+  try { await navigator.clipboard.writeText(text); toast('نُسخ ' + label); }
+  catch (e) {
+    openSheet(`<h3>${esc(label)}</h3><p class="sheet-sub">انسخه وأرسله لأهلك.</p>
+      <textarea readonly style="width:100%;min-height:190px;padding:13px;border-radius:13px;border:1px solid var(--line);background:var(--card);font:inherit;line-height:1.9">${esc(text)}</textarea>`);
+  }
+}
+
+/* ── شاشة قائمة المعايدة ──────────────────────────── */
+function viewGreeting(v) {
+  const s = S.activeSeason();
+  if (!s || !s.greeting) { go('today'); return; }
+
+  const rows = S.greetingOrder(s);
+  if (!rows.length) {
+    v.appendChild(emptyBox('🎉', 'لا أحد في قائمتك بعد',
+      'أضف أرحامك أولًا لترتّب لك صِلة قائمة معايدة بالأولوية.', 'أضف قريبًا', () => openAddSheet()));
+    return;
+  }
+
+  const head = el('div', 'card');
+  const rerender = () => { render(); };
+  const done0 = S.greetedList(s).filter(id => S.getPerson(id)).length;
+  head.innerHTML = `
+    <div class="section-title" style="margin-bottom:4px">${s.icon} ${esc(s.title)}</div>
+    <p class="muted">مرتّبة بالأولوية: آكد الأرحام أولًا، ثم الأطول انقطاعًا. اضغط الاسم لتعليمه.</p>
+    <div class="season-prog light" style="margin-top:11px">
+      <div class="season-bar"><i style="width:${rows.length ? done0 / rows.length * 100 : 0}%"></i></div>
+      <span>${done0} من ${rows.length}</span>
+    </div>`;
+  v.appendChild(head);
+
+  const byTier = { 1: [], 2: [], 3: [] };
+  rows.forEach(r => byTier[r.s.tier || 3].push(r));
+
+  Object.entries(byTier).forEach(([tier, list]) => {
+    if (!list.length) return;
+    const t = R.TIERS[tier];
+    const sec = el('div', 'section');
+    const remaining = list.filter(r => !S.hasGreeted(s, r.p.id)).length;
+    sec.appendChild(el('div', 'section-head',
+      `<span class="section-title">${esc(t.label)}</span><span class="muted">${remaining ? 'بقي ' + remaining : '✅ اكتملت'}</span>`));
+
+    list.forEach(({ p }) => {
+      const greeted = S.hasGreeted(s, p.id);
+      const rel = R.REL_MAP[p.relation] || {};
+      const row = el('div', 'greet' + (greeted ? ' done' : ''));
+      row.innerHTML = `
+        <button class="greet-main" data-tick>
+          <span class="greet-check">✓</span>
+          <span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+          <span class="greet-n">${esc(p.name)}<span>${esc(rel.label || '')}${p.city ? ' · ' + esc(p.city) : ''}</span></span>
+        </button>
+        <div class="greet-acts">
+          ${p.phone ? `<a class="gbtn" href="https://wa.me/${esc(p.phone.replace(/[^\d]/g, ''))}" target="_blank" rel="noopener" title="واتساب">💬</a>
+                       <a class="gbtn" href="tel:${esc(p.phone)}" title="اتصال">📞</a>` : ''}
+          <button class="gbtn" data-copy title="نسخ التهنئة">✍️</button>
+        </div>`;
+
+      const mark = () => {
+        S.toggleGreeted(s, p.id);
+        if (!greeted) { S.addEvent(p.id, 'message', 'معايدة ' + s.label); haptic(); }
+        rerender();
+      };
+      row.querySelector('[data-tick]').onclick = mark;
+      row.querySelector('[data-copy]').onclick = () =>
+        shareText(window.SEASON.eidMessage(p.name.split(' ')[0], s), 'التهنئة');
+      row.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+        if (!S.hasGreeted(s, p.id)) { S.toggleGreeted(s, p.id); S.addEvent(p.id, 'message', 'معايدة ' + s.label); }
+        setTimeout(rerender, 700);
+      }));
+      sec.appendChild(row);
+    });
+    v.appendChild(sec);
+  });
+
+  const note = el('div', 'card muted');
+  note.innerHTML = '💡 كل تعليم يُسجَّل كصلة في سجل القريب، والقائمة تُصفَّر تلقائيًا في العيد القادم.';
   v.appendChild(note);
 }
 
@@ -1388,12 +1597,13 @@ function gatheringRow(g) {
 }
 
 /* ── ورقة إنشاء/تعديل لمّة ────────────────────────── */
-function openGatheringSheet(existing) {
+function openGatheringSheet(existing, preset) {
   const isEdit = !!existing;
   const people = S.activePeople();
   let picked = new Set(existing ? existing.guests : []);
+  const seed = existing || preset || {};
 
-  const d = new Date(Date.now() + 7 * 86400000);
+  const d = new Date(Date.now() + (preset ? 1 : 7) * 86400000);
   const defDate = existing ? existing.date
     : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -1412,22 +1622,22 @@ function openGatheringSheet(existing) {
     <p class="sheet-sub">حدّد الموعد وادعُ مَن تشاء — وبعدها سجّل مَن حضر بضغطة.</p>
 
     <label class="field"><span>المناسبة *</span>
-      <input id="g-title" type="text" placeholder="مثال: لمّة عيال العم" value="${esc(existing?.title || '')}"></label>
+      <input id="g-title" type="text" placeholder="مثال: لمّة عيال العم" value="${esc(seed.title || '')}"></label>
 
     <div class="field-row">
       <label class="field"><span>التاريخ *</span>
         <input id="g-date" type="date" value="${esc(defDate)}"></label>
       <label class="field"><span>الوقت</span>
-        <input id="g-time" type="time" value="${esc(existing?.time || '20:00')}"></label>
+        <input id="g-time" type="time" value="${esc(seed.time || '20:00')}"></label>
     </div>
 
     <label class="field"><span>المكان</span>
-      <input id="g-place" type="text" placeholder="مثال: استراحة أبو سعد — حي النرجس" value="${esc(existing?.place || '')}"></label>
+      <input id="g-place" type="text" placeholder="مثال: استراحة أبو سعد — حي النرجس" value="${esc(seed.place || '')}"></label>
 
     <label class="field"><span>التكرار</span>
       <select id="g-repeat">
         ${Object.entries(S.REPEATS).map(([k, r]) =>
-          `<option value="${k}"${existing?.repeat === k ? ' selected' : ''}>${r.label}</option>`).join('')}
+          `<option value="${k}"${(seed.repeat || 'none') === k ? ' selected' : ''}>${r.label}</option>`).join('')}
       </select></label>
 
     <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:14px 0 8px">
@@ -1450,7 +1660,7 @@ function openGatheringSheet(existing) {
       : '<div class="card muted">أضف أرحامك أولًا لتتمكّن من دعوتهم.</div>'}
 
     <label class="field" style="margin-top:14px"><span>ملاحظة تُرفق بالدعوة</span>
-      <textarea id="g-notes" placeholder="مثال: العشاء الساعة ٩، ونرجو إحضار الأطفال">${esc(existing?.notes || '')}</textarea></label>
+      <textarea id="g-notes" placeholder="مثال: العشاء الساعة ٩، ونرجو إحضار الأطفال">${esc(seed.notes || '')}</textarea></label>
 
     <button class="btn btn-primary btn-lg" id="g-save">${isEdit ? 'حفظ التعديلات' : 'أنشئ اللمّة'}</button>
   `, body => {
@@ -1654,6 +1864,7 @@ function boot() {
     seedDemo();
   }
 
+  applySeasonTheme();
   const needsOnboard = !S.db.settings.myName && S.db.people.length === 0;
   $('#onboard').hidden = !needsOnboard;
   if (needsOnboard) {
