@@ -393,6 +393,34 @@ a{color:var(--green);text-decoration:none}
 .occ .e{font-size:22px}
 .occ .in{flex:none;font-size:11.5px;font-weight:800;background:var(--gold-l);color:var(--gold);padding:3px 10px;border-radius:99px}
 
+/* ── شريط التسجيل السريع ──────────────────────────
+   أوجه لا أسماء: التعرّف أسرع من القراءة، والهدف ثانيتان. */
+.qstrip{
+  display:flex;gap:11px;overflow-x:auto;padding:4px 2px 12px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch
+}
+.qstrip::-webkit-scrollbar{display:none}
+.qitem{
+  flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  transition:transform .1s
+}
+.qitem:active{transform:scale(.9)}
+.qav{position:relative;display:block}
+.qitem .avatar{width:54px;height:54px;font-size:19px;border:2.5px solid transparent}
+.qtick{
+  position:absolute;inset-block-end:-2px;inset-inline-end:-2px;
+  width:21px;height:21px;border-radius:50%;background:var(--warm);color:#fff;
+  display:grid;place-items:center;font-size:12px;font-weight:800;
+  border:2px solid var(--bg);opacity:0;transform:scale(.5);transition:.2s
+}
+.qitem.done .qtick{opacity:1;transform:scale(1)}
+.qitem.done .avatar{opacity:.45}
+.qn{
+  font-size:11.5px;font-weight:700;color:var(--ink-2);max-width:62px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.qitem.done .qn{color:var(--ink-3)}
+
 /* ══ المواسم — رمضان والعيد ═══════════════════════
    --sa/--sg1/--sg2 يضبطها applySeasonTheme() على <html>. */
 .season{

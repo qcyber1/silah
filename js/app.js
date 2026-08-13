@@ -299,6 +299,9 @@ function viewToday(v) {
   const g = S.activeGathering();
   if (g) v.appendChild(gatheringHero(g));
 
+  /* شريط التسجيل السريع — مصمَّم لمن يتصل ثم يسجّل، لا العكس */
+  v.appendChild(quickLogStrip());
+
   /* مناسبات قريبة */
   const occ = S.upcomingOccasions(10);
   if (occ.length) {
@@ -312,6 +315,57 @@ function viewToday(v) {
 
   /* نص اليوم */
   v.appendChild(textOfDay());
+}
+
+/* ══ التسجيل السريع ═════════════════════════════════
+   الحالة الشائعة: كلّم قريبه من الهاتف مباشرة ثم فتح التطبيق ليسجّل.
+   فالمطلوب أقصر مسار ممكن: وجه → ضغطة → تم. بلا بحث ولا فتح صفحة.
+   ترتيب الأسماء بالأولوية نفسها، ومن سُجّل اليوم ينزاح إلى الآخر. */
+function quickLogStrip() {
+  const today = new Date().toDateString();
+  const loggedToday = new Set(
+    S.db.events.filter(e => new Date(e.at).toDateString() === today).map(e => e.personId)
+  );
+
+  /* المقتطعان منفصلان عمدًا: لو فرزتُ المُسجَّلين إلى الآخر ثم اقتطعت،
+     لسقطوا خارج الشريط ولما ظهرت علامة «تم» قط. */
+  const all = S.activePeople().map(p => ({ p, done: loggedToday.has(p.id) }));
+  const pending = all.filter(x => !x.done)
+    .sort((a, b) => S.priorityOf(b.p) - S.priorityOf(a.p)).slice(0, 12);
+  const done = all.filter(x => x.done).slice(0, 6);
+  const rows = pending.concat(done);
+  if (!rows.length) return el('div');
+
+  const sec = el('div', 'section');
+  sec.appendChild(el('div', 'section-head',
+    `<span class="section-title">سجّل بسرعة</span><span class="muted">${
+      done.length ? arPeople(done.length) + ' اليوم ✓' : 'كلّمته؟ اضغط وجهه'}</span>`));
+
+  const strip = el('div', 'qstrip');
+  rows.forEach(({ p, done }) => {
+    const b = el('button', 'qitem' + (done ? ' done' : ''));
+    b.innerHTML = `
+      <span class="qav"><span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+        <span class="qtick">✓</span></span>
+      <span class="qn">${esc(p.name.split(/\s+/)[0])}</span>`;
+    /* ضغطة = اتصال · ضغطة مطوّلة = اختيار نوع الصلة */
+    b.onclick = () => {
+      S.addEvent(p.id, 'call'); haptic();
+      toast('سُجّل اتصالك بـ' + p.name.split(/\s+/)[0] + ' — تقبّل الله');
+      setTimeout(render, 500);
+    };
+    let timer;
+    const hold = () => { timer = setTimeout(() => { timer = null; openLogSheet(p); }, 480); };
+    const release = e => { if (timer) clearTimeout(timer); else e.preventDefault(); };
+    b.addEventListener('pointerdown', hold);
+    b.addEventListener('pointerup', release);
+    b.addEventListener('pointerleave', () => clearTimeout(timer));
+    b.addEventListener('contextmenu', e => e.preventDefault());
+    strip.appendChild(b);
+  });
+  sec.appendChild(strip);
+  sec.appendChild(el('div', 'hint', '👆 ضغطة = اتصال · ضغطة مطوّلة = زيارة أو رسالة أو هديّة أو دعاء'));
+  return sec;
 }
 
 function suggestionCard(p, s) {
