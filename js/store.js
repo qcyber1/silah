@@ -355,13 +355,50 @@ function greetingOrder(season) {
       (a.done - b.done) || (a.s.tier - b.s.tier) || (b.s.ratio - a.s.ratio));
 }
 
-/* عدد من وصلتَهم اليوم — لهدف رمضان اليومي */
+/* عدد من وصلتَهم اليوم — لهدف رمضان والعشر */
 function reachedToday() {
   const today = new Date().toDateString();
   const ids = DB.events
     .filter(e => new Date(e.at).toDateString() === today && window.REL.ACTION_MAP[e.type]?.resets)
     .map(e => e.personId);
   return new Set(ids).size;
+}
+
+/* من دعوتَ لهم اليوم — هدف يوم عرفة */
+function duaToday() {
+  const today = new Date().toDateString();
+  const ids = DB.events
+    .filter(e => e.type === 'dua' && new Date(e.at).toDateString() === today)
+    .map(e => e.personId);
+  return new Set(ids).size;
+}
+
+/* ── الحجّاج من الأرحام ─────────────────────────────
+   p.hajjYear = السنة الهجرية التي يحجّ فيها. */
+function currentHijriYear() {
+  const h = window.SEASON?.hijri(new Date(), DB.settings.hijriOffset || 0);
+  return h ? h.year : null;
+}
+
+function pilgrims() {
+  const y = currentHijriYear();
+  return activePeople().filter(p => p.hajjYear && p.hajjYear === y);
+}
+
+function toggleHajj(personId) {
+  const p = getPerson(personId);
+  if (!p) return false;
+  const y = currentHijriYear();
+  p.hajjYear = p.hajjYear === y ? null : y;
+  save();
+  return p.hajjYear === y;
+}
+
+/* بعد يوم النحر يصير الحاجّ عائدًا، فتتبدّل الرسالة من توديع إلى تهنئة */
+function hajjPhase() {
+  const h = window.SEASON?.hijri(new Date(), DB.settings.hijriOffset || 0);
+  if (!h || h.month !== 12) return 'before';
+  return h.day >= 10 ? 'after' : 'before';
 }
 
 /* ── إحصاءات ───────────────────────────────────────── */
@@ -437,6 +474,7 @@ window.STORE = {
   upcomingOccasions, monthStats, streakDays,
   REPEATS, addGathering, updateGathering, deleteGathering, getGathering,
   daysUntil, upcomingGatherings, pastGatherings, activeGathering, recordAttendance,
-  activeSeason, seasonKey, greetedList, hasGreeted, toggleGreeted, greetingOrder, reachedToday,
+  activeSeason, seasonKey, greetedList, hasGreeted, toggleGreeted, greetingOrder,
+  reachedToday, duaToday, currentHijriYear, pilgrims, toggleHajj, hajjPhase,
   exportJSON, importJSON, wipe
 };

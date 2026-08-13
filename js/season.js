@@ -56,6 +56,31 @@ const SEASONS = {
     goal: 5,
     goalText: 'صِل ٥ من أرحامك اليوم'
   },
+  ashr: {
+    key: 'ashr',
+    label: 'عشر ذي الحجة',
+    icon: '🕋',
+    title: 'العشر من ذي الحجة',
+    blurb: 'أفضل أيام الدنيا؛ «ما مِن أيّامٍ العملُ الصالحُ فيهنّ أحبُّ إلى اللهِ من هذه الأيّامِ العشر» — وصِلةُ الرحمِ من أحبِّ العمل.',
+    accent: '#e8b155',
+    grad: ['#5a3c18', '#2d1d0a'],
+    goal: 3,
+    goalText: 'صِل ٣ من أرحامك اليوم',
+    hajj: true
+  },
+  arafah: {
+    key: 'arafah',
+    label: 'يوم عرفة',
+    icon: '🤍',
+    title: 'يوم عرفة',
+    blurb: 'ما من يومٍ يُعتِقُ اللهُ فيه من النارِ أكثرَ من يومِ عرفة. اجعل لأرحامك نصيبًا من دعائك — وابدأ بمن بينك وبينه جفوة.',
+    accent: '#f2dda6',
+    grad: ['#1d4034', '#0c211b'],
+    goal: 5,
+    goalText: 'ادعُ لخمسةٍ من أرحامك',
+    countDua: true,
+    hajj: true
+  },
   eid_fitr: {
     key: 'eid_fitr',
     label: 'عيد الفطر',
@@ -76,7 +101,8 @@ const SEASONS = {
     /* ذهب فاتح: يمرّ 3.47:1 على أخضر العيد — الأدكن كان يذوب في الخلفية */
     accent: '#f0b451',
     grad: ['#1a6b52', '#0d4536'],
-    greeting: true
+    greeting: true,
+    hajj: true
   }
 };
 
@@ -86,7 +112,11 @@ function detectSeason(offsetDays = 0) {
   if (!h) return null;
   if (h.month === 9) return h.day >= 21 ? SEASONS.ramadan_last10 : SEASONS.ramadan;
   if (h.month === 10 && h.day <= 4) return SEASONS.eid_fitr;
-  if (h.month === 12 && h.day >= 10 && h.day <= 13) return SEASONS.eid_adha;
+  if (h.month === 12) {
+    if (h.day <= 8) return SEASONS.ashr;
+    if (h.day === 9) return SEASONS.arafah;
+    if (h.day <= 13) return SEASONS.eid_adha;
+  }
   return null;
 }
 
@@ -114,8 +144,31 @@ function ramadanMessage(name) {
   ].filter(Boolean).join('\n');
 }
 
+/* تهنئة قبل السفر للحج */
+function hajjSendoffMessage(name) {
+  return [
+    `${name ? esc0(name) + '،' : ''} تقبّل الله منك 🕋`,
+    '',
+    'بلّغك الله البيت سالمًا، ورزقك حجًّا مبرورًا وسعيًا مشكورًا وذنبًا مغفورًا.',
+    '',
+    'لا تنسانا من دعائك في المشاعر 🤍'
+  ].filter(Boolean).join('\n');
+}
+
+/* تهنئة بعد العودة */
+function hajjReturnMessage(name) {
+  return [
+    `${name ? esc0(name) + '،' : ''} الحمد لله على السلامة 🤍`,
+    '',
+    'تقبّل الله حجّك، وغفر ذنبك، وردّك إلى أهلك سالمًا غانمًا.',
+    '',
+    'اشتقنا لك، ومتى نراك؟'
+  ].filter(Boolean).join('\n');
+}
+
 const esc0 = s => String(s == null ? '' : s);
 
 window.SEASON = {
-  hijri, HIJRI_MONTHS, daysUntilHijri, SEASONS, detectSeason, eidMessage, ramadanMessage
+  hijri, HIJRI_MONTHS, daysUntilHijri, SEASONS, detectSeason,
+  eidMessage, ramadanMessage, hajjSendoffMessage, hajjReturnMessage
 };

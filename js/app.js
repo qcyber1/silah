@@ -673,6 +673,22 @@ function viewPerson(v, id) {
   logSec.appendChild(el('div', 'hint', '🤲 الدعاء يُسجَّل كحسنة ولا يُصفِّر عدّاد التواصل — الصلة تحتاج تواصلًا.'));
   v.appendChild(logSec);
 
+  /* علامة الحج — تُدرِجه في قائمة الحجّاج خلال ذي الحجة */
+  const y = S.currentHijriYear();
+  const isHajj = p.hajjYear === y;
+  const hajjBtn = el('button', 'rowlink' + (isHajj ? ' on' : ''));
+  hajjBtn.style.marginBottom = '22px';
+  hajjBtn.innerHTML = `<span class="e">🕋</span>
+    <span class="t">يحجّ هذا العام${y ? ` (${y}هـ)` : ''}
+      <span class="s">${isHajj ? 'مُدرَج في قائمة الحجّاج — تُذكَّر بالدعاء له والتهنئة' : 'علّمه ليظهر في بطاقة العشر وعرفة والأضحى'}</span></span>
+    <span class="switch" aria-checked="${isHajj}"></span>`;
+  hajjBtn.onclick = () => {
+    const on = S.toggleHajj(p.id); haptic();
+    toast(on ? 'أُدرِج في قائمة الحجّاج 🕋' : 'أُزيل من القائمة');
+    render();
+  };
+  v.appendChild(hajjBtn);
+
   /* المناسبات */
   const occSec = el('div', 'section');
   occSec.appendChild(el('div', 'section-head',
@@ -1114,10 +1130,12 @@ function openSeasonSheet() {
 
   const modes = [
     ['auto', '🕌 تلقائي', auto ? `يكتشفه من التقويم — الآن: ${auto.label}` : 'يكتشفه من التقويم — لا موسم حاليًا'],
-    ['ramadan', '🌙 رمضان', 'معاينة وضع رمضان'],
-    ['ramadan_last10', '✨ العشر الأواخر', 'معاينة العشر الأواخر'],
-    ['eid_fitr', '🎉 عيد الفطر', 'معاينة قائمة المعايدة'],
-    ['eid_adha', '🎉 عيد الأضحى', 'معاينة قائمة المعايدة'],
+    ['ramadan', '🌙 رمضان', 'هدف يومي وعزائم إفطار'],
+    ['ramadan_last10', '✨ العشر الأواخر', 'الهدف يرتفع إلى خمسة'],
+    ['eid_fitr', '🎉 عيد الفطر', 'قائمة المعايدة'],
+    ['ashr', '🕋 عشر ذي الحجة', 'هدف يومي وقائمة الحجّاج'],
+    ['arafah', '🤍 يوم عرفة', 'هدف الدعاء وقائمة الحجّاج'],
+    ['eid_adha', '🎉 عيد الأضحى', 'المعايدة وتهنئة العائدين'],
     ['off', '⚪ معطّل', 'لا تُظهر أوضاع المواسم إطلاقًا']
   ];
 
@@ -1318,11 +1336,15 @@ function seasonCard(s) {
     c.querySelector('[data-open]').onclick = () => go('greet');
     c.querySelector('[data-msg]').onclick = () => shareText(SE.eidMessage('', s), 'نص التهنئة');
   } else {
-    /* ── وضع رمضان: هدف يومي + عدّ تنازلي ── */
-    const done = S.reachedToday();
+    /* ── هدف يومي: رمضان والعشر بالتواصل، وعرفة بالدعاء ── */
+    const done = s.countDua ? S.duaToday() : S.reachedToday();
     const goal = s.goal;
     const pct = Math.min(100, Math.round(done / goal * 100));
-    const toEid = SE.daysUntilHijri(10, 1, S.db.settings.hijriOffset || 0);
+    const isRamadan = s.key === 'ramadan' || s.key === 'ramadan_last10';
+    const toEid = isRamadan ? SE.daysUntilHijri(10, 1, S.db.settings.hijriOffset || 0)
+                            : SE.daysUntilHijri(12, 10, S.db.settings.hijriOffset || 0);
+    const eidName = isRamadan ? 'عيد الفطر' : 'عيد الأضحى';
+
     c.innerHTML = `
       <div class="season-head"><span class="season-icon">${s.icon}</span>
         <div><h3 class="season-title">${esc(s.title)}</h3>
@@ -1333,18 +1355,118 @@ function seasonCard(s) {
       </div>
       ${done >= goal ? '<div class="season-done">✅ بلغتَ هدف اليوم. تقبّل الله.</div>' : ''}
       <div class="season-actions">
-        <button class="btn btn-season" data-iftar>🍽️ عزيمة إفطار</button>
-        <button class="btn btn-season-ghost" data-msg>✍️ تهنئة رمضان</button>
+        ${isRamadan
+          ? '<button class="btn btn-season" data-meal>🍽️ عزيمة إفطار</button>'
+          : (s.countDua
+              ? '<button class="btn btn-season" data-duaall>🤲 ادعُ لأرحامك</button>'
+              : '<button class="btn btn-season" data-meal>🥩 وليمة الأضحى</button>')}
+        <button class="btn btn-season-ghost" data-msg>✍️ تهنئة</button>
       </div>
-      ${toEid !== null && toEid <= 40 ? `<div class="season-foot">🌙 بقي ${esc(arDays(toEid))} على العيد</div>` : ''}`;
-    c.querySelector('[data-iftar]').onclick = () => openGatheringSheet(null, {
-      title: 'عزيمة إفطار', time: '18:15', repeat: 'none',
-      notes: 'الإفطار عند الأذان، ونصلّي المغرب جماعة بإذن الله.'
-    });
-    c.querySelector('[data-msg]').onclick = () => shareText(SE.ramadanMessage(''), 'تهنئة رمضان');
+      ${toEid !== null && toEid > 0 && toEid <= 40
+        ? `<div class="season-foot">${isRamadan ? '🌙' : '🕋'} بقي ${esc(arDays(toEid))} على ${eidName}</div>` : ''}`;
+
+    const meal = c.querySelector('[data-meal]');
+    if (meal) meal.onclick = () => openGatheringSheet(null, isRamadan
+      ? { title: 'عزيمة إفطار', time: '18:15', repeat: 'none',
+          notes: 'الإفطار عند الأذان، ونصلّي المغرب جماعة بإذن الله.' }
+      : { title: 'وليمة الأضحى', time: '13:00', repeat: 'none',
+          notes: 'غداء الأضحى بعد صلاة العيد بإذن الله.' });
+
+    const duaAll = c.querySelector('[data-duaall]');
+    if (duaAll) duaAll.onclick = () => openDuaSheet();
+
+    c.querySelector('[data-msg]').onclick = () => shareText(
+      isRamadan ? SE.ramadanMessage('') : SE.eidMessage('', S.SEASON_ADHA || { key: 'eid_adha' }),
+      'التهنئة');
   }
+
+  /* الحجّاج من أرحامك — تظهر في مواسم ذي الحجة */
+  if (s.hajj) {
+    const list = S.pilgrims();
+    const phase = S.hajjPhase();
+    const box = el('div', 'hajj');
+    if (list.length) {
+      box.innerHTML = `<div class="hajj-head">🕋 الحجّاج من أرحامك <span>${list.length}</span></div>`;
+      list.forEach(p => {
+        const row = el('div', 'hajj-row');
+        row.innerHTML = `
+          <span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+          <span class="hajj-n">${esc(p.name)}<span>${esc(R.REL_MAP[p.relation]?.label || '')}</span></span>
+          <button class="gbtn" data-dua title="ادعُ له">🤲</button>
+          <button class="gbtn" data-msg title="${phase === 'after' ? 'هنّئه بالعودة' : 'ودّعه'}">✍️</button>`;
+        row.querySelector('[data-dua]').onclick = () => {
+          S.addEvent(p.id, 'dua', 'دعاء للحاجّ'); haptic();
+          toast('تقبّل الله دعاءك لـ' + p.name.split(' ')[0]); setTimeout(render, 650);
+        };
+        row.querySelector('[data-msg]').onclick = () => shareText(
+          phase === 'after' ? SE.hajjReturnMessage(p.name.split(' ')[0])
+                            : SE.hajjSendoffMessage(p.name.split(' ')[0]),
+          'الرسالة');
+        box.appendChild(row);
+      });
+    } else {
+      box.innerHTML = `<div class="hajj-head">🕋 الحجّاج من أرحامك</div>
+        <p class="hajj-empty">لم تُعلّم أحدًا. افتح صفحة القريب واضغط «يحجّ هذا العام» ليظهر هنا، فتذكّره بالدعاء والتهنئة.</p>`;
+    }
+    const pick = el('button', 'btn btn-season-ghost btn-block', list.length ? '＋ أضف حاجًّا' : '＋ علّم الحجّاج');
+    pick.style.marginTop = '10px';
+    pick.onclick = () => openHajjPicker();
+    box.appendChild(pick);
+    c.appendChild(box);
+  }
+
   sec.appendChild(c);
   return sec;
+}
+
+/* ── اختيار الحجّاج ───────────────────────────────── */
+function openHajjPicker() {
+  const people = S.activePeople();
+  const y = S.currentHijriYear();
+  if (!people.length) return toast('أضف أرحامك أولًا');
+
+  openSheet(`
+    <h3>مَن يحجّ هذا العام؟</h3>
+    <p class="sheet-sub">اختر من يحجّ في عام ${y}هـ — تُذكّرك صِلة بالدعاء له والتهنئة عند عودته.</p>
+    <div class="guestbox">
+      ${people.map(p => `
+        <button class="guest" type="button" data-h="${p.id}" aria-pressed="${p.hajjYear === y}">
+          <span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+          <span class="guest-n">${esc(p.name)}<span>${esc(R.REL_MAP[p.relation]?.label || '')}</span></span>
+          <span class="guest-c">✓</span></button>`).join('')}
+    </div>
+    <button class="btn btn-primary btn-lg" id="h-done" style="margin-top:14px">تم</button>`,
+    b => {
+      b.querySelectorAll('[data-h]').forEach(x => x.onclick = () => {
+        const on = S.toggleHajj(x.dataset.h);
+        x.setAttribute('aria-pressed', on); haptic();
+      });
+      b.querySelector('#h-done').onclick = () => { closeSheet(); render(); };
+    });
+}
+
+/* ── دعاء جماعي ليوم عرفة ─────────────────────────── */
+function openDuaSheet() {
+  const rows = S.greetingOrder(null).slice(0, 12);
+  openSheet(`
+    <h3>ادعُ لأرحامك</h3>
+    <p class="sheet-sub">اضغط الاسم لتسجيل دعوة له. مرتّبون بآكد الأرحام أولًا.</p>
+    <div class="guestbox">
+      ${rows.map(({ p }) => `
+        <button class="guest" type="button" data-d="${p.id}" aria-pressed="false">
+          <span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+          <span class="guest-n">${esc(p.name)}<span>${esc(R.REL_MAP[p.relation]?.label || '')}</span></span>
+          <span class="guest-c">🤲</span></button>`).join('')}
+    </div>
+    <button class="btn btn-primary btn-lg" id="d-done" style="margin-top:14px">تم</button>`,
+    b => {
+      b.querySelectorAll('[data-d]').forEach(x => x.onclick = () => {
+        if (x.getAttribute('aria-pressed') === 'true') return;
+        S.addEvent(x.dataset.d, 'dua', 'دعاء يوم عرفة');
+        x.setAttribute('aria-pressed', 'true'); haptic();
+      });
+      b.querySelector('#d-done').onclick = () => { closeSheet(); toast('تقبّل الله دعاءك'); render(); };
+    });
 }
 
 /* مشاركة نص عام (تهنئة، دعوة…) */
