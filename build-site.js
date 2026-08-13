@@ -53,7 +53,7 @@ fs.writeFileSync(SITE + '/app/src/silah/index.html', doc, 'utf8');
 
 /* أصول PWA تُخدَم من الجذر */
 fs.mkdirSync(SITE + '/app/public/icons', { recursive: true });
-['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png']
+['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'cover.png']
   .forEach(f => fs.copyFileSync(f, SITE + '/app/public/' + f));
 
 /* المسارات في المصدر مطلقة أصلًا — نمرّرها كما هي بلا تكرار الشرطة */

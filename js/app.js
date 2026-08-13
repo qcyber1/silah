@@ -268,6 +268,10 @@ function viewToday(v) {
     const box = emptyBox('👥', 'ابدأ ببناء شجرة أرحامك',
       'أضف والديك وإخوتك وأعمامك وأخوالك — وصِلة تتكفّل بتذكيرك بمن يستحق صلتك.',
       'أضف أول قريب', () => openAddSheet());
+    const bulk = el('button', 'btn btn-block', '⚡ أضِف عدة أقارب دفعة واحدة');
+    bulk.style.marginTop = '9px';
+    bulk.onclick = () => openBulkAddSheet();
+    box.appendChild(bulk);
     const demo = el('button', 'btn btn-ghost btn-block', '👁️ استعرض بمثال تجريبي');
     demo.style.marginTop = '9px';
     demo.onclick = () => { seedDemo(); toast('بيانات تجريبية — امسحها من «المزيد» متى شئت'); render(); };
@@ -913,6 +917,72 @@ function openOccasionSheet(p) {
 }
 
 /* ══════════════════════════════════════════════════
+   الإضافة الجماعية
+   العائق الأكبر أمام أي مستخدم جديد: بناء شجرة من ٢٥ اسمًا
+   عبر نموذج يُملأ مرة لكل شخص. هنا تُختار القرابة مرة واحدة
+   وتُكتب الأسماء دفعة واحدة.
+   ══════════════════════════════════════════════════ */
+function openBulkAddSheet(preRel) {
+  let relKey = preRel || null;
+
+  openSheet(`
+    <h3>أضف عدة أقارب دفعة واحدة</h3>
+    <p class="sheet-sub">اختر صلة القرابة مرة واحدة، ثم اكتب الأسماء — كل اسم في سطر.</p>
+
+    <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:4px 0 9px">صلة القرابة *</div>
+    <div id="relbox">
+      ${R.REL_PICKER.map(g => `
+        <div class="relgrp">
+          <h4>${g.title}</h4>
+          <div class="relchips">
+            ${g.keys.map(k => `<button class="relchip" data-rel="${k}" aria-pressed="${relKey === k}">${R.REL_MAP[k].label}</button>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <label class="field"><span>الأسماء — اسم في كل سطر</span>
+      <textarea id="b-names" style="min-height:132px;line-height:2" placeholder="فهد&#10;خالد&#10;سعود&#10;عبدالرحمن"></textarea></label>
+    <div class="hint" id="b-count">لم تكتب أسماءً بعد</div>
+
+    <label class="field" style="margin-top:13px"><span>المدينة (تُطبَّق على الجميع — اختياري)</span>
+      <input id="b-city" type="text" placeholder="الرياض"></label>
+
+    <button class="btn btn-primary btn-lg" id="b-save" style="margin-top:4px">أضِفهم</button>
+  `, body => {
+    const ta = body.querySelector('#b-names');
+    const countEl = body.querySelector('#b-count');
+    const btn = body.querySelector('#b-save');
+
+    const names = () => ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+    const refresh = () => {
+      const n = names().length;
+      countEl.textContent = n ? `${arPeople(n)} جاهزون للإضافة` : 'لم تكتب أسماءً بعد';
+      btn.textContent = n ? `أضِف ${arPeople(n)}` : 'أضِفهم';
+      btn.disabled = !n || !relKey;
+    };
+
+    body.querySelectorAll('[data-rel]').forEach(b => b.onclick = () => {
+      relKey = b.dataset.rel;
+      body.querySelectorAll('[data-rel]').forEach(x => x.setAttribute('aria-pressed', x.dataset.rel === relKey));
+      refresh();
+    });
+    ta.oninput = refresh;
+    refresh();
+
+    btn.onclick = () => {
+      const list = names();
+      if (!relKey) return toast('اختر صلة القرابة');
+      if (!list.length) return toast('اكتب اسمًا واحدًا على الأقل');
+      const city = body.querySelector('#b-city').value.trim();
+      list.forEach(name => S.addPerson({ name, relation: relKey, city }));
+      haptic(); closeSheet();
+      toast(`أُضيف ${arPeople(list.length)} 🌿`);
+      render();
+    };
+  });
+}
+
+/* ══════════════════════════════════════════════════
    ٤) إضافة / تعديل قريب
    ══════════════════════════════════════════════════ */
 function openAddSheet(existing) {
@@ -957,7 +1027,9 @@ function openAddSheet(existing) {
       <textarea id="f-notes" placeholder="ما يهمّه، أخباره، ما تحب أن تسأله عنه…">${esc(existing?.notes || '')}</textarea></label>
 
     <button class="btn btn-primary btn-lg" id="f-save">${isEdit ? 'حفظ التعديلات' : 'إضافة القريب'}</button>
-    ${isEdit ? '' : '<button class="btn btn-ghost btn-block" id="f-save-more" style="margin-top:9px">حفظ وإضافة آخر</button>'}
+    ${isEdit ? '' : `
+      <button class="btn btn-ghost btn-block" id="f-save-more" style="margin-top:9px">حفظ وإضافة آخر</button>
+      <button class="btn btn-ghost btn-block" id="f-bulk" style="margin-top:9px;color:var(--green)">⚡ عندك كثير؟ أضِفهم دفعة واحدة</button>`}
   `, body => {
     const cadSel = body.querySelector('#f-cad');
     const hint = body.querySelector('#cadhint');
@@ -995,6 +1067,9 @@ function openAddSheet(existing) {
       closeSheet();
       render();
     };
+    const bulk = body.querySelector('#f-bulk');
+    if (bulk) bulk.onclick = () => { closeSheet(); openBulkAddSheet(relKey); };
+
     const more = body.querySelector('#f-save-more');
     if (more) more.onclick = () => {
       const d = collect(); if (!d) return;
