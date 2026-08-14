@@ -1,14 +1,14 @@
-/* =====================================================================
+﻿/* =====================================================================
    صِلة — خادم ثابت بسيط (لـ Railway أو أي مستضيف يشغّل Node)
    بلا اعتماديات: يخدم ملفات المشروع نفسها كما هي.
-   محليًا:  node server.js      ثم افتح http://localhost:3000
+   محليًا:  node server.js      ثم افتح http://localhost:5179
    ===================================================================== */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = __dirname;
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5179;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -17,6 +17,7 @@ const TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2'
@@ -28,8 +29,11 @@ const BLOCKED = new Set(['/server.js', '/build-site.js', '/package.json', '/READ
 function cacheFor(pathname) {
   if (pathname === '/' || pathname === '/index.html') return 'no-cache';
   if (pathname === '/sw.js') return 'no-cache';
-  if (pathname.startsWith('/icons/')) return 'public, max-age=31536000, immutable';
-  return 'public, max-age=3600';
+  /* الأصول المُسمّاة بثبات تُخزَّن سنة؛ أما الكود فيجب أن يصل تحديثه فورًا */
+  if (pathname.startsWith('/icons/') || pathname.startsWith('/fonts/')) {
+    return 'public, max-age=31536000, immutable';
+  }
+  return 'no-cache';
 }
 
 const server = http.createServer((req, res) => {

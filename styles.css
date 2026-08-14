@@ -1,6 +1,33 @@
 /* =====================================================================
    صِلة — التنسيقات (جوال أولًا)
+   ---------------------------------------------------------------------
+   الخطوط: Cairo للواجهة و Amiri للنص الشرعي — كلاهما SIL OFL 1.1
+   ومستضافان محليًا (لا طلبات خارجية). التفاصيل في fonts/README.md
    ===================================================================== */
+
+/* Cairo — واجهة. unicode-range يجعل المتصفح ينزّل العربي وحده لمن لا يحتاج اللاتيني */
+@font-face{font-family:Cairo;font-style:normal;font-weight:400;font-display:swap;
+  src:url(fonts/cairo-arabic-400.woff2) format('woff2');
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:Cairo;font-style:normal;font-weight:700;font-display:swap;
+  src:url(fonts/cairo-arabic-700.woff2) format('woff2');
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:Cairo;font-style:normal;font-weight:800;font-display:swap;
+  src:url(fonts/cairo-arabic-800.woff2) format('woff2');
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:Cairo;font-style:normal;font-weight:400;font-display:swap;
+  src:url(fonts/cairo-latin-400.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212}
+/* اللاتيني هنا أرقامٌ ورموز فقط، فوزنان يكفيان — والأثقل يُشتقّ منهما */
+@font-face{font-family:Cairo;font-style:normal;font-weight:700 900;font-display:swap;
+  src:url(fonts/cairo-latin-700.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F,U+20AC,U+2122,U+2212}
+
+/* Amiri — نسخ كلاسيكي للآيات والأحاديث. يُحمَّل عند ظهور نص شرعي فقط */
+@font-face{font-family:Amiri;font-style:normal;font-weight:400;font-display:swap;
+  src:url(fonts/amiri-arabic-400.woff2) format('woff2');
+  unicode-range:U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+200C-200E,U+2010-2011,U+204F,U+2E41,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC}
+@font-face{font-family:Amiri;font-style:normal;font-weight:400;font-display:swap;
+  src:url(fonts/amiri-latin-400.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+
 :root{
   --green:#0e7a5f; --green-d:#0a5c47; --green-l:#e6f2ee;
   --gold:#c9821f; --gold-l:#fdf3e3;
@@ -14,7 +41,8 @@
   --tb:66px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
-  --font:"Segoe UI","Noto Naskh Arabic","Geeza Pro",Tahoma,system-ui,sans-serif;
+  --font:Cairo,"Segoe UI","Noto Sans Arabic",Tahoma,system-ui,sans-serif;
+  --font-q:Amiri,"Noto Naskh Arabic","Traditional Arabic",serif;
 }
 /* الوضع الليلي — يتبع نظام الجهاز، ويطيع مبدّل الوضع إن وُجد */
 @media (prefers-color-scheme:dark){
@@ -141,8 +169,13 @@ a{color:var(--green);text-decoration:none}
 }
 /* لا letter-spacing على العربية — يكسر وصل الحروف */
 .ayah-kind{font-size:11px;font-weight:800;color:var(--gold);margin-bottom:8px}
-.ayah-text{font-size:17.5px;line-height:2.2;font-weight:600}
-.ayah-text.q{font-family:"Noto Naskh Arabic","Traditional Arabic",var(--font)}
+/* الآية والحديث كلاهما نصٌّ شرعي — يشتركان في النسخ */
+.ayah-text{font-family:var(--font-q);font-size:19px;line-height:2.25;font-weight:400}
+/* النسخ للنص الشرعي — التباين مع سانس الواجهة هو ما يجعل الآية تُقرأ كآية.
+   وزن ٤٠٠ وحده: النسخ الثقيل يطمس التشكيل، ويوفّر ٩٨ك من التحميل. */
+.ayah-text.q,.tcard .body.q,.onboard-quote{
+  font-family:var(--font-q);font-weight:400;font-size:19.5px;line-height:2.2
+}
 .ayah-src{margin-top:9px;font-size:12px;color:var(--ink-3);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .chip-src{background:var(--green-l);color:var(--green);padding:2px 9px;border-radius:99px;font-weight:800;font-size:11.5px}
 
@@ -287,7 +320,7 @@ a{color:var(--green);text-decoration:none}
 .texttabs .fchip{flex:1;text-align:center}
 .tcard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px;box-shadow:var(--sh)}
 .tcard + .tcard{margin-top:10px}
-.tcard .body{font-size:16.5px;line-height:2.1;font-weight:600}
+.tcard .body{font-family:var(--font-q);font-size:18.5px;line-height:2.2;font-weight:400}
 .tcard .foot{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:12px;color:var(--ink-3)}
 .badge{padding:2px 9px;border-radius:99px;font-size:11px;font-weight:800}
 .badge.g{background:var(--green-l);color:var(--green)}
@@ -350,7 +383,7 @@ a{color:var(--green);text-decoration:none}
 .onboard-sub{color:var(--ink-3);margin-bottom:22px;font-size:15px}
 .onboard-quote{
   margin:0 0 24px;background:var(--card);border:1px solid var(--line);border-right:4px solid var(--gold);
-  border-radius:var(--r);padding:15px;font-size:15.5px;line-height:2.05;font-weight:600;text-align:right
+  border-radius:var(--r);padding:15px;font-size:15.5px;line-height:2.05;font-weight:400;text-align:right
 }
 .onboard-quote cite{display:block;margin-top:8px;font-size:11.5px;color:var(--ink-3);font-style:normal;font-weight:700}
 .onboard .field{text-align:right}
