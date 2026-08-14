@@ -1,3 +1,6 @@
+# خط ثمانية — ترخيصه يمنع الاستضافة والنشر. محلي فقط، لا يدخل المستودع.
+fonts/local/*.woff2
+
 node_modules/
 .DS_Store
 Thumbs.db
