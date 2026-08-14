@@ -56,6 +56,12 @@ fs.mkdirSync(SITE + '/app/public/icons', { recursive: true });
 ['icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'cover.png']
   .forEach(f => fs.copyFileSync(f, SITE + '/app/public/' + f));
 
+/* الخطوط — المسارات في CSS نسبية، والصفحة تُخدَم من الجذر، فتستقر على /fonts/ */
+fs.mkdirSync(SITE + '/app/public/fonts', { recursive: true });
+fs.readdirSync('fonts')
+  .filter(f => f.endsWith('.woff2'))
+  .forEach(f => fs.copyFileSync('fonts/' + f, SITE + '/app/public/fonts/' + f));
+
 /* المسارات في المصدر مطلقة أصلًا — نمرّرها كما هي بلا تكرار الشرطة */
 const manifest = JSON.parse(fs.readFileSync('manifest.webmanifest', 'utf8'));
 manifest.start_url = '/';
