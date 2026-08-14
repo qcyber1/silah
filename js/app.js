@@ -1211,6 +1211,7 @@ function viewMore(v) {
   const season = S.activeSeason();
   const items = [
     ['🌙', 'وضع رمضان والعيد', season ? `نشط الآن: ${season.label}` : 'يُفعَّل تلقائيًا في موعده', 'seasonSheet'],
+    ['🔤', 'خط التطبيق', (fontList().find(f => f.k === (S.db.settings.font || 'plex')) || FONTS[0]).label, 'fontSheet'],
     ['🫂', 'لقاءات العائلة', up.length ? `القادمة: ${up[0].title} — ${countdown(S.daysUntil(up[0].date))}` : 'رتّب لمّة وادعُ أرحامك', 'meets'],
     ['📖', 'آيات وأحاديث صلة الرحم', `${T.VERSES.length} آية و${T.HADITHS.length} حديثًا من الصحيحين`, 'texts'],
     ['📊', 'سجل الصلة والإحصاءات', 'كم وصلت هذا الشهر ومن تحتاج أن تصله', 'stats'],
@@ -1222,7 +1223,9 @@ function viewMore(v) {
   items.forEach(([e, t, s, r]) => {
     const b = el('button', 'rowlink', `<span class="e">${e}</span>
       <span class="t">${esc(t)}<span class="s">${esc(s)}</span></span><span class="pc-go">‹</span>`);
-    b.onclick = () => r === 'seasonSheet' ? openSeasonSheet() : go(r);
+    b.onclick = () => r === 'seasonSheet' ? openSeasonSheet()
+                    : r === 'fontSheet'   ? openFontSheet()
+                    : go(r);
     box.appendChild(b);
   });
   v.appendChild(box);
@@ -1248,6 +1251,59 @@ function viewMore(v) {
     onConfirm: () => { S.wipe(); toast('مُسحت البيانات'); boot(); }
   });
   v.appendChild(wipe);
+}
+
+/* ══ اختيار الخط ════════════════════════════════════
+   الخطوط الثلاثة مُعلَنة في CSS، ولا ينزّل المتصفح إلا المستعمَل. */
+const FONTS = [
+  { k: 'plex',    label: 'بلِكس',    note: 'مرسوم لواجهات الشاشات — الأوضح في المقاسات الصغيرة' },
+  { k: 'cairo',   label: 'القاهرة',  note: 'الأكثر استخدامًا في المواقع العربية' },
+  { k: 'tajawal', label: 'تجوّال',   note: 'مستدير وودود، والأخفّ تحميلًا' },
+  { k: 'system',  label: 'خط جهازك', note: 'بلا أي تحميل — الأسرع' }
+];
+
+/* خط محلي يُضيفه font-local.js عند التشغيل على الجهاز (ثمانية) */
+const fontList = () => window.SILAH_LOCAL_FONT
+  ? [{ k: window.SILAH_LOCAL_FONT.key, label: window.SILAH_LOCAL_FONT.label, note: window.SILAH_LOCAL_FONT.note }, ...FONTS]
+  : FONTS;
+
+const CSS_FAMILY = { plex: 'Plex', cairo: 'Cairo', tajawal: 'Tajawal', thmanyah: 'Thmanyah', system: 'system-ui' };
+
+function applyFont() {
+  const list = fontList();
+  let f = S.db.settings.font || 'plex';
+  if (!list.some(x => x.k === f)) f = 'plex';   /* اختير ثمانية ثم فُتح على نطاق عام */
+  const root = document.documentElement;
+  if (f === 'plex') root.removeAttribute('data-font');
+  else root.setAttribute('data-font', f);
+}
+
+function openFontSheet() {
+  const list = fontList();
+  const cur = list.some(f => f.k === S.db.settings.font) ? S.db.settings.font : 'plex';
+  openSheet(`
+    <h3>خط التطبيق</h3>
+    <p class="sheet-sub">اضغط أيًّا منها لترى الفرق فورًا. النص الشرعي يبقى بخط النسخ في كل الأحوال.</p>
+    <div class="optlist">
+      ${list.map(f => `
+        <button class="opt${cur === f.k ? ' picked' : ''}" data-f="${f.k}">
+          <span class="opt-t" style="font-family:${CSS_FAMILY[f.k] || 'system-ui'}">
+            ${esc(f.label)} — صِلة الأرحام
+            <span style="font-family:var(--font)">${esc(f.note)}</span></span>
+          <span class="opt-tick">${cur === f.k ? '✓' : ''}</span>
+        </button>`).join('')}
+    </div>
+    <div class="hint" style="margin-top:12px">التغيير يُحفظ على جهازك، ولا يؤثّر على غيرك.</div>`,
+    b => {
+      b.querySelectorAll('[data-f]').forEach(x => x.onclick = () => {
+        S.db.settings.font = x.dataset.f; S.save();
+        applyFont(); haptic();
+        b.querySelectorAll('[data-f]').forEach(y => {
+          y.classList.toggle('picked', y === x);
+          y.querySelector('.opt-tick').textContent = y === x ? '✓' : '';
+        });
+      });
+    });
 }
 
 /* ── إعدادات الموسم ───────────────────────────────── */
@@ -2115,6 +2171,7 @@ function boot() {
     seedDemo();
   }
 
+  applyFont();
   applySeasonTheme();
   const needsOnboard = !S.db.settings.myName && S.db.people.length === 0;
   $('#onboard').hidden = !needsOnboard;

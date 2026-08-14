@@ -31,15 +31,20 @@
 
   const style = document.createElement('style');
   style.id = 'thmanyah-local';
-  /* الوزن ٨٠٠ في التطبيق يُشتقّ من ٩٠٠، فيُدرَج الأخير ضمن مدى */
+  /* لا يفرض نفسه — يُضاف كخيار في «المزيد ← خط التطبيق» ليختاره المستخدم،
+     وإلا لتعارض مع مبدّل الخطوط وأبطله. */
   style.textContent = faces + `
     @font-face{
       font-family:Thmanyah;font-style:normal;font-weight:800 900;font-display:swap;
       src:url(fonts/local/thmanyah-900.woff2) format('woff2');
       unicode-range:${ARABIC};
     }
-    :root{ --font: Thmanyah, Cairo, "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, sans-serif; }`;
+    :root[data-font="thmanyah"]{
+      --font: Thmanyah, "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+    }`;
   document.head.appendChild(style);
 
-  console.info('صِلة: خط ثمانية مُفعَّل — تشغيل محلي فقط، ولا يُنشر.');
+  /* يقرأه app.js فيُظهر الخيار في القائمة */
+  window.SILAH_LOCAL_FONT = { key: 'thmanyah', label: 'ثمانية', note: 'جهازك فقط — لا يُنشر (قيد الترخيص)' };
+  console.info('صِلة: خط ثمانية متاح كخيار — تشغيل محلي فقط، ولا يُنشر.');
 })();
