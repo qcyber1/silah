@@ -300,8 +300,11 @@ a{color:var(--green);text-decoration:none}
 .relgrp h4{font-size:12.5px;color:var(--ink-3);margin-bottom:7px;font-weight:800}
 .relchips{display:flex;flex-wrap:wrap;gap:7px}
 .relchip{
-  padding:9px 13px;border-radius:99px;border:1px solid var(--line);background:var(--card);
-  font-size:13.5px;font-weight:700;color:var(--ink-2)
+  /* min-width لأجل الكلمات القصيرة مثل «أخ» — الحشو وحده لا يبلغ ٤٤ */
+  min-height:44px;min-width:44px;padding:0 14px;border-radius:99px;
+  border:1px solid var(--line);background:var(--card);
+  font-size:13.5px;font-weight:700;color:var(--ink-2);
+  display:inline-flex;align-items:center;justify-content:center
 }
 .relchip[aria-pressed="true"]{background:var(--green);color:#fff;border-color:transparent}
 
@@ -464,6 +467,20 @@ a{color:var(--green);text-decoration:none}
 .occ + .occ{margin-top:9px}
 .occ .e{font-size:22px}
 .occ .in{flex:none;font-size:11.5px;font-weight:800;background:var(--gold-l);color:var(--gold);padding:3px 10px;border-radius:99px}
+
+/* ── التراجع داخل التنبيه ─────────────────────────── */
+.toast-undo{
+  margin-inline-start:12px;padding:5px 12px;border-radius:99px;
+  background:rgba(255,255,255,.18);color:var(--bg);font-size:13px;font-weight:800
+}
+:root[data-theme="dark"] .toast-undo,
+.toast-undo{color:inherit}
+.toast-undo:active{transform:scale(.94)}
+
+/* ── معالج بناء الشجرة ────────────────────────────── */
+.wiz-bar{height:5px;border-radius:9px;background:var(--line);overflow:hidden;margin-bottom:14px}
+.wiz-bar i{display:block;height:100%;background:var(--green);border-radius:9px;transition:width .35s cubic-bezier(.2,.8,.25,1)}
+.wiz-step{font-size:11.5px;font-weight:800;color:var(--green);margin-bottom:6px}
 
 /* ── شريط التسجيل السريع ──────────────────────────
    أوجه لا أسماء: التعرّف أسرع من القراءة، والهدف ثانيتان. */

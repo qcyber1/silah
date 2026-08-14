@@ -111,6 +111,7 @@ function addEvent(personId, type, note, at) {
     at: at || new Date().toISOString()
   };
   DB.events.push(ev);
+  rememberEvent(ev);
   save();
   return ev;
 }
@@ -118,6 +119,39 @@ function addEvent(personId, type, note, at) {
 function deleteEvent(id) {
   DB.events = DB.events.filter(e => e.id !== id);
   save();
+}
+
+/* ── التراجع ────────────────────────────────────────
+   يحتفظ بآخر تسجيل ليُلغى بضغطة، فالخطأ في الشريط السريع
+   لا يُصلَّح إلا بفتح صفحة الشخص. */
+let lastEvent = null;
+const rememberEvent = ev => { lastEvent = { id: ev.id, personId: ev.personId, at: Date.now() }; };
+const undoable = () => lastEvent && Date.now() - lastEvent.at < 20000 ? lastEvent : null;
+function undoLastEvent() {
+  const l = undoable();
+  if (!l) return null;
+  deleteEvent(l.id);
+  lastEvent = null;
+  return l;
+}
+
+/* ── كشف التكرار ────────────────────────────────────
+   المقارنة على الاسم مجرَّدًا من التشكيل والألف واللام والهمزات،
+   فـ«عبد الله» و«عبدالله» و«عبداللّه» اسم واحد. */
+function normalizeName(s) {
+  return String(s || '')
+    .replace(/[ً-ْٰ]/g, '')   // تشكيل
+    .replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+    .replace(/^ال/, '')
+    .replace(/\s+/g, '')
+    .trim().toLowerCase();
+}
+
+function findDuplicates(name, relation) {
+  const n = normalizeName(name);
+  if (!n) return [];
+  return activePeople().filter(p =>
+    normalizeName(p.name) === n && (!relation || p.relation === relation));
 }
 
 const eventsOf = id =>
@@ -470,6 +504,7 @@ window.STORE = {
   load, save, uid,
   addPerson, updatePerson, deletePerson, getPerson, activePeople,
   addEvent, deleteEvent, eventsOf, lastContact, lastDua,
+  undoable, undoLastEvent, findDuplicates, normalizeName,
   statusOf, STATE_META, priorityOf, suggestions,
   upcomingOccasions, monthStats, streakDays,
   REPEATS, addGathering, updateGathering, deleteGathering, getGathering,

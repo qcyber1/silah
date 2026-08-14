@@ -123,11 +123,39 @@ function avatarColor(id) {
 }
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, undo) {
   const t = $('#toast');
-  t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, 2100);
+  t.innerHTML = '';
+  t.appendChild(document.createTextNode(msg));
+  if (undo) {
+    const b = el('button', 'toast-undo', 'تراجع');
+    b.onclick = () => { t.hidden = true; clearTimeout(toastTimer); undo(); };
+    t.appendChild(b);
+  }
+  t.hidden = false;
+  toastTimer = setTimeout(() => { t.hidden = true; }, undo ? 5200 : 2100);
+}
+
+/* تسجيل صلة مع إتاحة التراجع — المسار الوحيد لكل تسجيل من زرّ سريع */
+function logContact(person, type, note, msg) {
+  S.addEvent(person.id, type, note);
+  haptic();
+  toast(msg, () => {
+    if (S.undoLastEvent()) { toast('أُلغي التسجيل'); render(); }
+  });
+  setTimeout(render, 550);
+}
+
+/* ── شارة الأيقونة ────────────────────────────────
+   رقم على أيقونة التطبيق المثبَّت: كم رحمًا ينتظرك. */
+function updateBadge() {
+  if (!('setAppBadge' in navigator)) return;
+  try {
+    const n = S.activePeople().length ? S.suggestions(99).length : 0;
+    if (n > 0) navigator.setAppBadge(n).catch(() => {});
+    else navigator.clearAppBadge().catch(() => {});
+  } catch (e) { /* غير مدعوم */ }
 }
 
 function haptic() { if (navigator.vibrate) navigator.vibrate(12); }
@@ -204,6 +232,7 @@ function render() {
     if (b.dataset.route === route.name) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   });
+  updateBadge();
 
   switch (route.name) {
     case 'today':   title.textContent = 'صِلة';        viewToday(v); break;
@@ -266,12 +295,15 @@ function viewToday(v) {
   const people = S.activePeople();
   if (!people.length) {
     const box = emptyBox('👥', 'ابدأ ببناء شجرة أرحامك',
-      'أضف والديك وإخوتك وأعمامك وأخوالك — وصِلة تتكفّل بتذكيرك بمن يستحق صلتك.',
-      'أضف أول قريب', () => openAddSheet());
-    const bulk = el('button', 'btn btn-block', '⚡ أضِف عدة أقارب دفعة واحدة');
+      'يسألك سؤالًا سؤالًا — والدك، إخوانك، أعمامك — وتخرج بشجرتك كاملة في دقيقة.',
+      '✨ ابنِ شجرتي معي', () => openWizard());
+    const bulk = el('button', 'btn btn-block', '⚡ أو أضِفهم دفعة واحدة');
     bulk.style.marginTop = '9px';
     bulk.onclick = () => openBulkAddSheet();
-    box.appendChild(bulk);
+    const one = el('button', 'btn btn-ghost btn-block', 'أضِف قريبًا واحدًا');
+    one.style.marginTop = '9px';
+    one.onclick = () => openAddSheet();
+    box.appendChild(bulk); box.appendChild(one);
     const demo = el('button', 'btn btn-ghost btn-block', '👁️ استعرض بمثال تجريبي');
     demo.style.marginTop = '9px';
     demo.onclick = () => { seedDemo(); toast('بيانات تجريبية — امسحها من «المزيد» متى شئت'); render(); };
@@ -354,9 +386,7 @@ function quickLogStrip() {
       <span class="qn">${esc(p.name.split(/\s+/)[0])}</span>`;
     /* ضغطة = اتصال · ضغطة مطوّلة = اختيار نوع الصلة */
     b.onclick = () => {
-      S.addEvent(p.id, 'call'); haptic();
-      toast('سُجّل اتصالك بـ' + p.name.split(/\s+/)[0] + ' — تقبّل الله');
-      setTimeout(render, 500);
+      logContact(p, 'call', '', 'سُجّل اتصالك بـ' + p.name.split(/\s+/)[0] + ' — تقبّل الله');
     };
     let timer;
     const hold = () => { timer = setTimeout(() => { timer = null; openLogSheet(p); }, 480); };
@@ -399,7 +429,7 @@ function suggestionCard(p, s) {
     </div>`;
 
   const callBtn = c.querySelector('[data-call]');
-  if (callBtn) callBtn.onclick = () => { S.addEvent(p.id, 'call'); haptic(); toast('سُجّل اتصالك بـ' + p.name + ' — تقبّل الله'); setTimeout(render, 700); };
+  if (callBtn) callBtn.onclick = () => logContact(p, 'call', '', 'سُجّل اتصالك بـ' + p.name + ' — تقبّل الله');
   const logBtn = c.querySelector('[data-log]');
   if (logBtn) logBtn.onclick = () => openLogSheet(p);
   c.querySelector('[data-open]').onclick = () => go('person', p.id);
@@ -720,11 +750,8 @@ function viewPerson(v, id) {
   const acts = el('div', 'acts');
   R.ACTIONS.forEach(a => {
     const b = el('button', 'act big', `<span class="e">${a.icon}</span><span>${a.label}</span>`);
-    b.onclick = () => {
-      S.addEvent(p.id, a.key); haptic();
-      toast(a.key === 'dua' ? 'تقبّل الله دعاءك 🤲' : `سُجّلت ${a.label} — بارك الله فيك`);
-      setTimeout(render, 650);
-    };
+    b.onclick = () => logContact(p, a.key, '',
+      a.key === 'dua' ? 'تقبّل الله دعاءك 🤲' : `سُجّلت ${a.label} — بارك الله فيك`);
     acts.appendChild(b);
   });
   logSec.appendChild(acts);
@@ -864,18 +891,42 @@ function optionSheet({ title, body, options }) {
 
 /* ── ورقة تسجيل سريعة ─────────────────────────────── */
 function openLogSheet(p) {
+  const DAY = 86400000;
+  /* «متى» يمنع تشويه حساب الحرارة حين يُسجَّل لقاءُ أمس اليوم */
+  const WHEN = [
+    { d: 0, label: 'اليوم' }, { d: 1, label: 'أمس' },
+    { d: 2, label: 'قبل يومين' }, { d: 3, label: 'قبل 3 أيام' },
+    { d: 7, label: 'قبل أسبوع' }
+  ];
+  let back = 0;
+
   openSheet(`
     <h3>سجّل صلة مع ${esc(p.name)}</h3>
     <p class="sheet-sub">اختر نوع الصلة — ضغطة واحدة تكفي.</p>
     <div class="acts">
       ${R.ACTIONS.map(a => `<button class="act big" data-a="${a.key}"><span class="e">${a.icon}</span><span>${a.label}</span></button>`).join('')}
     </div>
+
+    <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:16px 0 8px">متى؟</div>
+    <div class="relchips">
+      ${WHEN.map(w => `<button class="relchip" data-w="${w.d}" aria-pressed="${w.d === 0}">${w.label}</button>`).join('')}
+    </div>
+
     <label class="field" style="margin-top:14px"><span>ملاحظة (اختياري)</span>
-      <input id="lognote" type="text" placeholder="مثال: سألته عن صحته"></label>`,
+      <input id="lognote" type="text" placeholder="مثال: سألته عن صحته، وذكر أنه مسافر"></label>
+    <div class="hint">الملاحظة تظهر في سجلّه، فتذكّرك المرة القادمة بآخر ما دار بينكما.</div>`,
     body => {
+      body.querySelectorAll('[data-w]').forEach(b => b.onclick = () => {
+        back = Number(b.dataset.w);
+        body.querySelectorAll('[data-w]').forEach(x => x.setAttribute('aria-pressed', x === b));
+      });
       body.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
-        S.addEvent(p.id, b.dataset.a, body.querySelector('#lognote').value);
-        haptic(); closeSheet(); toast('سُجّلت الصلة — تقبّل الله'); render();
+        const at = back ? new Date(Date.now() - back * DAY).toISOString() : undefined;
+        const ev = S.addEvent(p.id, b.dataset.a, body.querySelector('#lognote').value, at);
+        haptic(); closeSheet();
+        toast(back ? 'سُجّلت الصلة بتاريخها' : 'سُجّلت الصلة — تقبّل الله',
+          () => { S.deleteEvent(ev.id); toast('أُلغي التسجيل'); render(); });
+        render();
       });
     });
 }
@@ -914,6 +965,98 @@ function openOccasionSheet(p) {
         closeSheet(); toast('أُضيفت المناسبة'); render();
       };
     });
+}
+
+/* ══════════════════════════════════════════════════
+   معالج بناء الشجرة
+   المستخدم الجديد يفتح تطبيقًا فارغًا فيقف: «مَن أرحامي؟».
+   السؤال المرتَّب يستخرج ما في ذهنه أسرع من نموذج فارغ.
+   ══════════════════════════════════════════════════ */
+const WIZARD = [
+  { rel: 'father',   title: 'والدك',            hint: 'اسم والدك — واتركه فارغًا إن كان متوفّى أو لا تريد إضافته الآن.', single: true },
+  { rel: 'mother',   title: 'والدتك',           hint: 'اسم والدتك.', single: true },
+  { rel: 'brother',  title: 'إخوانك',           hint: 'اسم كل أخ في سطر.' },
+  { rel: 'sister',   title: 'أخواتك',           hint: 'اسم كل أخت في سطر.' },
+  { rel: 'son',      title: 'أبناؤك',           hint: 'اتركها فارغة إن لم يكن لك أبناء.' },
+  { rel: 'daughter', title: 'بناتك',            hint: '' },
+  { rel: 'uncle_p',  title: 'أعمامك',           hint: 'إخوة والدك.' },
+  { rel: 'aunt_p',   title: 'عمّاتك',           hint: 'أخوات والدك.' },
+  { rel: 'uncle_m',  title: 'أخوالك',           hint: 'إخوة والدتك.' },
+  { rel: 'aunt_m',   title: 'خالاتك',           hint: 'أخوات والدتك — «الخالة بمنزلة الأم».' },
+  { rel: 'gf_f',     title: 'جدّك وجدّتك لأبيك', hint: 'اسم الجد ثم الجدة، كلٌّ في سطر.', pair: 'gm_f' },
+  { rel: 'gf_m',     title: 'جدّك وجدّتك لأمّك', hint: 'اسم الجد ثم الجدة، كلٌّ في سطر.', pair: 'gm_m' }
+];
+
+function openWizard() {
+  let step = 0;
+  const answers = {};        /* rel -> [أسماء] */
+
+  const render_ = () => {
+    const s = WIZARD[step];
+    const pct = Math.round(step / WIZARD.length * 100);
+    const prev = (answers[s.rel] || []).join('\n');
+
+    openSheet(`
+      <div class="wiz-bar"><i style="width:${pct}%"></i></div>
+      <div class="wiz-step">الخطوة ${step + 1} من ${WIZARD.length}</div>
+      <h3>${esc(s.title)}</h3>
+      <p class="sheet-sub">${esc(s.hint || '')}</p>
+
+      ${s.single
+        ? `<label class="field"><input id="w-in" type="text" placeholder="الاسم" value="${esc(prev)}"></label>`
+        : `<label class="field"><textarea id="w-in" style="min-height:120px;line-height:2" placeholder="اسم في كل سطر">${esc(prev)}</textarea></label>`}
+      <div class="hint" id="w-count"></div>
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        ${step > 0 ? '<button class="btn" id="w-back" style="flex:none;padding:14px 18px">‹</button>' : ''}
+        <button class="btn btn-primary" id="w-next" style="flex:1">${step === WIZARD.length - 1 ? 'أنهِ وابنِ الشجرة' : 'التالي'}</button>
+      </div>
+      <button class="btn btn-ghost btn-block" id="w-skip" style="margin-top:9px">تخطّى هذه</button>
+      <button class="btn btn-ghost btn-block" id="w-quit" style="margin-top:4px;color:var(--ink-3)">أنهِ الآن بما أدخلتُه</button>
+    `, body => {
+      const inp = body.querySelector('#w-in');
+      const cnt = body.querySelector('#w-count');
+      const names = () => inp.value.split('\n').map(x => x.trim()).filter(Boolean);
+      const tick = () => {
+        const n = names().length;
+        cnt.textContent = n ? `${arPeople(n)} في هذه الخطوة` : '';
+      };
+      inp.oninput = tick; tick();
+      inp.focus({ preventScroll: true });
+
+      const save = () => { answers[s.rel] = names(); };
+      const advance = () => {
+        if (step < WIZARD.length - 1) { step++; render_(); }
+        else finish();
+      };
+
+      body.querySelector('#w-next').onclick = () => { save(); advance(); };
+      body.querySelector('#w-skip').onclick = () => { answers[s.rel] = []; advance(); };
+      const back = body.querySelector('#w-back');
+      if (back) back.onclick = () => { save(); step--; render_(); };
+      body.querySelector('#w-quit').onclick = () => { save(); finish(); };
+      if (s.single) inp.onkeydown = e => { if (e.key === 'Enter') { save(); advance(); } };
+    });
+  };
+
+  const finish = () => {
+    let added = 0;
+    WIZARD.forEach(s => {
+      const list = answers[s.rel] || [];
+      list.forEach((name, i) => {
+        /* خطوة الجدّين: الأول جد والثاني جدة */
+        const rel = (s.pair && i === 1) ? s.pair : s.rel;
+        if (S.findDuplicates(name, rel).length) return;   /* لا يُكرَّر */
+        S.addPerson({ name, relation: rel });
+        added++;
+      });
+    });
+    closeSheet();
+    toast(added ? `بُنيت شجرتك — ${arPeople(added)} 🌿` : 'لم يُضَف أحد');
+    go('tree');
+  };
+
+  render_();
 }
 
 /* ══════════════════════════════════════════════════
@@ -974,9 +1117,15 @@ function openBulkAddSheet(preRel) {
       if (!relKey) return toast('اختر صلة القرابة');
       if (!list.length) return toast('اكتب اسمًا واحدًا على الأقل');
       const city = body.querySelector('#b-city').value.trim();
-      list.forEach(name => S.addPerson({ name, relation: relKey, city }));
+      let added = 0, skipped = 0;
+      list.forEach(name => {
+        if (S.findDuplicates(name, relKey).length) { skipped++; return; }
+        S.addPerson({ name, relation: relKey, city }); added++;
+      });
       haptic(); closeSheet();
-      toast(`أُضيف ${arPeople(list.length)} 🌿`);
+      toast(skipped
+        ? `أُضيف ${arPeople(added)} · تُخطّي ${skipped} مكرّرًا`
+        : `أُضيف ${arPeople(added)} 🌿`);
       render();
     };
   });
@@ -1051,6 +1200,10 @@ function openAddSheet(existing) {
       const name = body.querySelector('#f-name').value.trim();
       if (!name) { toast('اكتب الاسم أولًا'); return null; }
       if (!relKey) { toast('اختر صلة القرابة'); return null; }
+      if (!isEdit) {
+        const dup = S.findDuplicates(name, relKey);
+        if (dup.length) { toast(`«${dup[0].name}» موجود عندك بنفس القرابة`); return null; }
+      }
       return {
         name, relation: relKey,
         phone: body.querySelector('#f-phone').value.trim(),
