@@ -1211,6 +1211,10 @@ function viewMore(v) {
   const season = S.activeSeason();
   const items = [
     ['🌙', 'وضع رمضان والعيد', season ? `نشط الآن: ${season.label}` : 'يُفعَّل تلقائيًا في موعده', 'seasonSheet'],
+    ['🔔', 'التذكير اليومي', (() => {
+      const n = S.db.settings.notify;
+      return n && n.enabled ? 'مُفعَّل — يوميًا عند ' + hourLabel(n.hour) : 'مُطفأ — فعّله ليذكّرك';
+    })(), 'notifySheet'],
     ['🔤', 'خط التطبيق', (fontList().find(f => f.k === (S.db.settings.font || 'plex')) || FONTS[0]).label, 'fontSheet'],
     ['🫂', 'لقاءات العائلة', up.length ? `القادمة: ${up[0].title} — ${countdown(S.daysUntil(up[0].date))}` : 'رتّب لمّة وادعُ أرحامك', 'meets'],
     ['📖', 'آيات وأحاديث صلة الرحم', `${T.VERSES.length} آية و${T.HADITHS.length} حديثًا من الصحيحين`, 'texts'],
@@ -1225,6 +1229,7 @@ function viewMore(v) {
       <span class="t">${esc(t)}<span class="s">${esc(s)}</span></span><span class="pc-go">‹</span>`);
     b.onclick = () => r === 'seasonSheet' ? openSeasonSheet()
                     : r === 'fontSheet'   ? openFontSheet()
+                    : r === 'notifySheet' ? openNotifySheet()
                     : go(r);
     box.appendChild(b);
   });
@@ -1251,6 +1256,83 @@ function viewMore(v) {
     onConfirm: () => { S.wipe(); toast('مُسحت البيانات'); boot(); }
   });
   v.appendChild(wipe);
+}
+
+/* ══ التذكير اليومي ═════════════════════════════════ */
+const HOURS = [7, 9, 12, 16, 18, 20, 22];
+/* أرقام غربية في كل الواجهة — الخلط مع الهندية يبدو كخلل */
+const hourLabel = h => h === 12 ? '12 ظهرًا'
+  : h < 12 ? `${h} صباحًا`
+  : `${h - 12} مساءً`;
+
+async function openNotifySheet() {
+  const N = window.NOTIFY;
+  const cap = await N.capability();
+  const n = N.settings();
+  const on = n.enabled && cap.permission === 'granted';
+
+  /* لا نعد بما لا يتحقق: الجدولة في الخلفية تحتاج تثبيتًا ودعمًا */
+  const bg = cap.periodic && cap.installed;
+  const reality = !cap.supported
+    ? { icon: '⚠️', text: 'متصفحك لا يدعم الإشعارات. جرّب كروم أو سفاري حديثًا.' }
+    : bg
+      ? { icon: '✅', text: 'يصلك التذكير حتى والتطبيق مغلق.' }
+      : cap.installed
+        ? { icon: 'ℹ️', text: 'جهازك لا يجدول الإشعارات في الخلفية — يصلك التذكير أول ما تفتح التطبيق بعد الموعد.' }
+        : { icon: '📲', text: 'ثبّت التطبيق على شاشتك الرئيسية ليصلك التذكير والتطبيق مغلق. بدونه يظهر عند الفتح فقط.' };
+
+  openSheet(`
+    <h3>التذكير اليومي</h3>
+    <p class="sheet-sub">إشعار واحد في اليوم بمن يستحق صلتك — ومناسبات أرحامك ولمّاتهم.</p>
+
+    <button class="rowlink${on ? ' on' : ''}" id="n-toggle" style="margin-bottom:14px">
+      <span class="e">🔔</span>
+      <span class="t">${on ? 'التذكير مُفعَّل' : 'فعّل التذكير'}
+        <span class="s">${on ? 'يوميًا عند ' + esc(hourLabel(n.hour)) : 'يطلب إذن الإشعارات مرة واحدة'}</span></span>
+      <span class="switch" aria-checked="${on}"></span>
+    </button>
+
+    <div id="n-body" ${on ? '' : 'hidden'}>
+      <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:4px 0 9px">وقت التذكير</div>
+      <div class="relchips" style="margin-bottom:15px">
+        ${HOURS.map(h => `<button class="relchip" data-h="${h}" aria-pressed="${n.hour === h}">${hourLabel(h)}</button>`).join('')}
+      </div>
+      <button class="btn btn-block" id="n-test">🔔 جرّب الإشعار الآن</button>
+    </div>
+
+    <div class="card muted" style="margin-top:14px">${reality.icon} ${esc(reality.text)}</div>
+    ${cap.permission === 'denied' ? `<div class="card" style="margin-top:10px;border-color:var(--cold)">
+      <p class="muted">🚫 <b style="color:var(--ink)">الإشعارات محجوبة</b> لهذا الموقع من إعدادات متصفحك. افتح إعدادات الموقع واسمح بالإشعارات، ثم ارجع هنا.</p></div>` : ''}
+  `, b => {
+    const bodyEl = b.querySelector('#n-body');
+
+    b.querySelector('#n-toggle').onclick = async () => {
+      if (N.settings().enabled) {
+        await N.disable(); toast('أُوقف التذكير'); closeSheet(); render(); return;
+      }
+      const res = await N.enable();
+      if (res === 'granted') { haptic(); toast('فُعّل التذكير 🔔'); closeSheet(); openNotifySheet(); render(); }
+      else if (res === 'denied') { toast('رُفض الإذن — فعّله من إعدادات المتصفح'); closeSheet(); openNotifySheet(); }
+      else toast('متصفحك لا يدعم الإشعارات');
+    };
+
+    b.querySelectorAll('[data-h]').forEach(x => x.onclick = () => {
+      N.settings().hour = Number(x.dataset.h);
+      N.settings().lastShown = null;      /* الموعد الجديد يستحق تذكيرًا اليوم */
+      S.save();
+      b.querySelectorAll('[data-h]').forEach(y => y.setAttribute('aria-pressed', y === x));
+      b.querySelector('#n-toggle .s').textContent = 'يوميًا عند ' + hourLabel(Number(x.dataset.h));
+      haptic();
+    });
+
+    const t = b.querySelector('#n-test');
+    if (t) t.onclick = async () => {
+      const r = await N.test();
+      if (r === 'granted') toast('أُرسل الإشعار — تحقّق من شاشتك');
+      else toast('لم يُسمح بالإشعارات بعد');
+    };
+    if (bodyEl && !on) bodyEl.hidden = true;
+  });
 }
 
 /* ══ اختيار الخط ════════════════════════════════════
@@ -2173,6 +2255,16 @@ function boot() {
 
   applyFont();
   applySeasonTheme();
+
+  /* التذكير: يُعوَّض ما فات عند الفتح، ويُحدَّث الملخّص لعامل الخدمة.
+     وعند العودة للتطبيق بعد غياب، يُعاد الفحص. */
+  if (window.NOTIFY) {
+    setTimeout(() => window.NOTIFY.checkAndFire().catch(() => {}), 1200);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) window.NOTIFY.checkAndFire().catch(() => {});
+    });
+  }
+
   const needsOnboard = !S.db.settings.myName && S.db.people.length === 0;
   $('#onboard').hidden = !needsOnboard;
   if (needsOnboard) {

@@ -4,7 +4,7 @@ const SITE = process.argv[2];
 if (!SITE) { console.error('usage: node build-site.js <site-repo-path>'); process.exit(1); }
 
 const css = fs.readFileSync('styles.css', 'utf8');
-const js = ['js/texts.js', 'js/relations.js', 'js/season.js', 'js/store.js', 'js/app.js']
+const js = ['js/texts.js', 'js/relations.js', 'js/season.js', 'js/store.js', 'js/notify.js', 'js/app.js']
   .map(f => fs.readFileSync(f, 'utf8')).join('\n');
 const html = fs.readFileSync('index.html', 'utf8');
 const body = html.split('<body>')[1].split('</body>')[0].replace(/<script[\s\S]*?<\/script>/g, '').trim();
@@ -68,36 +68,14 @@ manifest.start_url = '/';
 manifest.scope = '/';
 fs.writeFileSync(SITE + '/app/public/manifest.webmanifest', JSON.stringify(manifest, null, 2), 'utf8');
 
-const sw = `/* صِلة — عامل الخدمة: يجعل التطبيق يعمل بدون إنترنت */
-const CACHE = 'silah-v2';
-const ASSETS = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
-
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE)
-    .then(c => Promise.allSettled(ASSETS.map(a => c.add(a))))
-    .then(() => self.skipWaiting()));
-});
-
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys()
-    .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
-});
-
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET' || !req.url.startsWith(self.location.origin)) return;
-  e.respondWith(
-    fetch(req)
-      .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-        return res;
-      })
-      .catch(() => caches.match(req).then(r => r || caches.match('/')))
-  );
-});
-`;
+/* عامل الخدمة نفسه لا نسخة موازية — النسخة المكرّرة سبق أن تخلّفت عن الأصل.
+   الفرق الوحيد أن هذا البناء يدمج الكود في الصفحة، فلا ملفات js منفصلة تُخزَّن. */
+const sw = fs.readFileSync('sw.js', 'utf8')
+  .replace(/^\s*'\.\/js\/[^']*',?\s*$/gm, '')      // لا ملفات js مستقلة هنا
+  .replace(/'\.\//g, "'/")                          // المسارات من الجذر
+  .replace(/caches\.match\('\/index\.html'\)/g, "caches.match('/')")
+  .replace(/'\/index\.html',\s*/g, '')
+  .replace(/,(\s*)\]/g, '$1]');
 fs.writeFileSync(SITE + '/app/public/sw.js', sw, 'utf8');
 
 console.log('document: ' + (doc.length / 1024).toFixed(1) + 'KB');
