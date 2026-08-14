@@ -213,8 +213,10 @@ function priorityOf(person) {
   return (overdue + 0.05) * tierWeight;
 }
 
+/* أصحاب الجفوة لا يظهرون هنا — لهم مسارهم ونبرتهم */
 function suggestions(limit = 3) {
   return activePeople()
+    .filter(p => !hasRift(p))
     .map(p => ({ p, s: statusOf(p), pr: priorityOf(p) }))
     .filter(x => x.s.state !== 'warm')
     .sort((a, b) => b.pr - a.pr)
@@ -345,6 +347,77 @@ function recordAttendance(id, attendedIds) {
   }
   save();
   return g;
+}
+
+/* ══ نيّة الصلح ═════════════════════════════════════
+   القطيعة ليست مكالمةً فائتة، فلا تُعامَل معاملتها. مَن بينك وبينه
+   جفوة يُرفَع من قائمة «من يستحق صلتك» — لأن صاحبه يعلم — ويُنقَل
+   إلى مسارٍ خاص: خطواتٌ صغيرة متدرّجة، وتذكيرٌ أسبوعي لا يومي.
+   ═════════════════════════════════════════════════ */
+const RIFT_STEPS = [
+  { i: 1, icon: '🤲', label: 'دعوتُ له بظهر الغيب', hint: 'أيسر الطريق وأولُه، ولا يعلمه إلا الله.' },
+  { i: 2, icon: '🕊️', label: 'ألقيتُ عليه السلام',   hint: 'كلمةٌ واحدة تفتح بابًا.' },
+  { i: 3, icon: '💬', label: 'أرسلتُ له رسالة',       hint: 'سطرٌ يسأل عن حاله، بلا عتاب ولا تذكيرٍ بما مضى.' },
+  { i: 4, icon: '📞', label: 'كلّمتُه',                hint: 'الصوت أقرب من الحرف.' },
+  { i: 5, icon: '🏠', label: 'زرتُه',                  hint: 'وهذه غاية ما يُرجى.' }
+];
+
+const WEEK = 7 * DAY;
+
+function hasRift(p) { return !!(p && p.rift && !p.rift.resolved); }
+const riftPeople = () => activePeople().filter(hasRift);
+
+function setRift(personId, on, note) {
+  const p = getPerson(personId);
+  if (!p) return null;
+  if (on) {
+    p.rift = p.rift && !p.rift.resolved
+      ? { ...p.rift, note: note != null ? note : p.rift.note }
+      : { since: new Date().toISOString(), note: note || '', step: 0, marks: {}, lastNudge: null, resolved: null };
+  } else {
+    p.rift = null;
+  }
+  save();
+  return p.rift;
+}
+
+/* الخطوة تُسجَّل بتاريخها، ويُسجَّل الدعاء والتواصل في سجل القريب أيضًا */
+function markRiftStep(personId, step) {
+  const p = getPerson(personId);
+  if (!hasRift(p)) return null;
+  const now = new Date().toISOString();
+  p.rift.marks[step] = now;
+  p.rift.step = Math.max(p.rift.step, step);
+  if (step === 1) addEvent(p.id, 'dua', 'دعاء نيّة الصلح');
+  if (step === 3) addEvent(p.id, 'message', 'أول رسالة بعد الجفوة');
+  if (step === 4) addEvent(p.id, 'call', 'أول اتصال بعد الجفوة');
+  if (step === 5) addEvent(p.id, 'visit', 'أول زيارة بعد الجفوة');
+  save();
+  return p.rift;
+}
+
+function resolveRift(personId) {
+  const p = getPerson(personId);
+  if (!hasRift(p)) return null;
+  p.rift.resolved = new Date().toISOString();
+  save();
+  return p;
+}
+
+/* التذكير أسبوعي: واحدٌ فقط في المرة، وأطولهم جفوةً أولًا */
+function riftNudge() {
+  const due = riftPeople().filter(p => {
+    const last = p.rift.lastNudge ? new Date(p.rift.lastNudge).getTime() : 0;
+    return Date.now() - last > WEEK;
+  });
+  if (!due.length) return null;
+  due.sort((a, b) => new Date(a.rift.since) - new Date(b.rift.since));
+  return due[0];
+}
+
+function markNudged(personId) {
+  const p = getPerson(personId);
+  if (hasRift(p)) { p.rift.lastNudge = new Date().toISOString(); save(); }
 }
 
 /* ══ المواسم والمعايدة ══════════════════════════════ */
@@ -509,6 +582,7 @@ window.STORE = {
   upcomingOccasions, monthStats, streakDays,
   REPEATS, addGathering, updateGathering, deleteGathering, getGathering,
   daysUntil, upcomingGatherings, pastGatherings, activeGathering, recordAttendance,
+  RIFT_STEPS, hasRift, riftPeople, setRift, markRiftStep, resolveRift, riftNudge, markNudged,
   activeSeason, seasonKey, greetedList, hasGreeted, toggleGreeted, greetingOrder,
   reachedToday, duaToday, currentHijriYear, pilgrims, toggleHajj, hajjPhase,
   exportJSON, importJSON, wipe

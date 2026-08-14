@@ -244,6 +244,7 @@ function render() {
     case 'occ':     title.textContent = 'المناسبات';   backBtn('more'); viewOccasions(v); break;
     case 'meets':   title.textContent = 'لقاءات العائلة'; backBtn('more'); viewGatherings(v); break;
     case 'greet':   title.textContent = 'قائمة المعايدة'; backBtn('today'); viewGreeting(v); break;
+    case 'rift':    title.textContent = 'نيّة الصلح';     backBtn('more'); viewRift(v); break;
     case 'backup':  title.textContent = 'النسخ الاحتياطي'; backBtn('more'); viewBackup(v); break;
     case 'person':  viewPerson(v, route.param); break;
     default:        viewToday(v);
@@ -334,6 +335,10 @@ function viewToday(v) {
   /* اللقاء القادم */
   const g = S.activeGathering();
   if (g) v.appendChild(gatheringHero(g));
+
+  /* نيّة الصلح — واحدٌ فقط، ومرة كل أسبوع */
+  const rift = S.riftNudge();
+  if (rift) v.appendChild(riftCard(rift));
 
   /* شريط التسجيل السريع — مصمَّم لمن يتصل ثم يسجّل، لا العكس */
   v.appendChild(quickLogStrip());
@@ -757,6 +762,22 @@ function viewPerson(v, id) {
   logSec.appendChild(acts);
   logSec.appendChild(el('div', 'hint', '🤲 الدعاء يُسجَّل كحسنة ولا يُصفِّر عدّاد التواصل — الصلة تحتاج تواصلًا.'));
   v.appendChild(logSec);
+
+  /* نيّة الصلح */
+  const riftOn = S.hasRift(p);
+  const riftBtn = el('button', 'rowlink' + (riftOn ? ' on' : ''));
+  riftBtn.style.marginBottom = '10px';
+  riftBtn.innerHTML = `<span class="e">🤝</span>
+    <span class="t">بيني وبينه جفوة
+      <span class="s">${riftOn
+        ? 'في نيّة الصلح — خطوة كل أسبوع، ومرفوع من الإلحاح اليومي'
+        : 'يُرفَع من قائمة الإلحاح، ويُنقَل إلى مسار الصلح الهادئ'}</span></span>
+    <span class="switch" aria-checked="${riftOn}"></span>`;
+  riftBtn.onclick = () => {
+    if (riftOn) go('rift');
+    else openRiftNote(p, true);
+  };
+  v.appendChild(riftBtn);
 
   /* علامة الحج — تُدرِجه في قائمة الحجّاج خلال ذي الحجة */
   const y = S.currentHijriYear();
@@ -1369,6 +1390,13 @@ function viewMore(v) {
       return n && n.enabled ? 'مُفعَّل — يوميًا عند ' + hourLabel(n.hour) : 'مُطفأ — فعّله ليذكّرك';
     })(), 'notifySheet'],
     ['🔤', 'خط التطبيق', (fontList().find(f => f.k === (S.db.settings.font || 'plex')) || FONTS[0]).label, 'fontSheet'],
+    ['🤝', 'نيّة الصلح', (() => {
+      const n = S.riftPeople().length;
+      if (!n) return 'لمن بينك وبينه جفوة';
+      if (n === 1) return 'تنوي صلح قريب واحد';
+      if (n === 2) return 'تنوي صلح قريبين';
+      return `تنوي صلح ${arPeople(n)}`;
+    })(), 'rift'],
     ['🫂', 'لقاءات العائلة', up.length ? `القادمة: ${up[0].title} — ${countdown(S.daysUntil(up[0].date))}` : 'رتّب لمّة وادعُ أرحامك', 'meets'],
     ['📖', 'آيات وأحاديث صلة الرحم', `${T.VERSES.length} آية و${T.HADITHS.length} حديثًا من الصحيحين`, 'texts'],
     ['📊', 'سجل الصلة والإحصاءات', 'كم وصلت هذا الشهر ومن تحتاج أن تصله', 'stats'],
@@ -1713,6 +1741,161 @@ function viewStats(v) {
   note.style.marginTop = '14px';
   note.innerHTML = '💡 هذه الأرقام لك وحدك — لا تُنشر ولا تُشارَك. اجعلها عونًا على الخير لا مباهاة.';
   v.appendChild(note);
+}
+
+/* ══════════════════════════════════════════════════
+   نيّة الصلح
+   لا مؤشر أحمر ولا إلحاح: صاحب الجفوة يعلم قطيعته، وما ينقصه
+   تذكيرٌ بل خطوةٌ صغيرة يقدر عليها. النبرة هنا مختلفة عمدًا.
+   ══════════════════════════════════════════════════ */
+
+/* بطاقة أسبوعية واحدة في شاشة اليوم — واحدٌ فقط، ولا تتكرّر قبل أسبوع */
+function riftCard(p) {
+  const r = p.rift;
+  const next = S.RIFT_STEPS.find(s => !r.marks[s.i]) || null;
+  const sec = el('div', 'section');
+  const c = el('div', 'rift-card');
+  c.innerHTML = `
+    <div class="rift-badge">🤝 نيّة الصلح</div>
+    <h3 class="rift-title">${esc(p.name)}</h3>
+    <p class="rift-verse">«لَيْسَ الْوَاصِلُ بِالْمُكَافِئِ، وَلَكِنِ الْوَاصِلُ الَّذِي إِذَا قُطِعَتْ رَحِمُهُ وَصَلَهَا»</p>
+    <div class="rift-src">البخاري ٥٩٩١</div>
+    ${next ? `<div class="rift-next">خطوتك التالية — ${next.icon} ${esc(next.label)}<span>${esc(next.hint)}</span></div>`
+           : '<div class="rift-next">بلغتَ آخر الخطوات. أسأل الله أن يجمع قلبيكما.</div>'}
+    <div class="rift-actions">
+      ${next ? `<button class="btn btn-rift" data-do>${next.icon} ${esc(next.label)}</button>` : ''}
+      <button class="btn btn-rift-ghost" data-open>الخطوات كلها</button>
+    </div>`;
+  const d = c.querySelector('[data-do]');
+  if (d) d.onclick = () => {
+    S.markRiftStep(p.id, next.i); haptic();
+    toast(next.i === 1 ? 'تقبّل الله دعاءك 🤲' : 'بارك الله فيك — بدأتَ');
+    render();
+  };
+  c.querySelector('[data-open]').onclick = () => go('rift');
+  S.markNudged(p.id);
+  sec.appendChild(c);
+  return sec;
+}
+
+function viewRift(v) {
+  const list = S.riftPeople();
+
+  const intro = el('div', 'card');
+  intro.innerHTML = `
+    <p class="rift-verse" style="color:var(--ink)">جاء رجلٌ فقال: يا رسول الله، إنَّ لي قَرابةً أَصِلُهُم ويَقطَعوني… فقال ﷺ: «لَئِنْ كُنْتَ كَمَا قُلْتَ… وَلَا يَزَالُ مَعَكَ مِنَ اللَّهِ ظَهِيرٌ عَلَيْهِمْ مَا دُمْتَ عَلَى ذَلِكَ»</p>
+    <div class="rift-src" style="color:var(--ink-3)">مسلم ٢٥٥٨</div>
+    <p class="muted" style="margin-top:11px">من تضعه هنا يُرفَع من قائمة «مَن يستحق صلتك اليوم» — فالجفوة ليست نسيانًا يُذكَّر به. ويُذكَّرك التطبيق بخطوة واحدة كل أسبوع، لا كل يوم.</p>`;
+  v.appendChild(intro);
+
+  if (!list.length) {
+    const e = emptyBox('🤝', 'لا أحد هنا — والحمد لله',
+      'إن كان بينك وبين رحمٍ جفوة، ضعه هنا. لا أحد يرى هذا غيرك، وأول خطوة دعوةٌ في ظهر الغيب.',
+      'اختر مَن أنوي صلحه', () => openRiftPicker());
+    v.appendChild(e);
+    return;
+  }
+
+  list.forEach(p => {
+    const r = p.rift;
+    const done = S.RIFT_STEPS.filter(s => r.marks[s.i]).length;
+    const days = Math.floor((Date.now() - new Date(r.since)) / 86400000);
+    const sec = el('div', 'section');
+    const card = el('div', 'card rift-person');
+    card.innerHTML = `
+      <div class="rift-head">
+        <div class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+        <div class="pc-main">
+          <div class="pc-name">${esc(p.name)}</div>
+          <div class="pc-rel">${esc(R.REL_MAP[p.relation]?.label || '')} · نويتَ صلحه ${esc(agoText(days))}</div>
+        </div>
+        <span class="rift-count">${done}/${S.RIFT_STEPS.length}</span>
+      </div>
+      ${r.note ? `<div class="rift-note">${esc(r.note)}</div>` : ''}
+      <div class="rift-steps">
+        ${S.RIFT_STEPS.map(s => {
+          const at = r.marks[s.i];
+          return `<button class="rstep${at ? ' done' : ''}" data-s="${s.i}" data-p="${p.id}">
+            <span class="rstep-i">${at ? '✓' : s.icon}</span>
+            <span class="rstep-t">${esc(s.label)}<span>${at
+              ? esc(new Date(at).getDate() + ' ' + AR_MONTHS[new Date(at).getMonth()])
+              : esc(s.hint)}</span></span>
+          </button>`;
+        }).join('')}
+      </div>
+      <div class="rift-foot">
+        <button class="btn btn-primary" data-resolve="${p.id}">🤍 عادت الصلة بحمد الله</button>
+        <button class="btn btn-ghost" data-edit="${p.id}">✏️</button>
+      </div>`;
+
+    card.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+      const i = Number(b.dataset.s);
+      if (r.marks[i]) return;                       /* المُنجَز لا يُلغى بلمسة عابرة */
+      S.markRiftStep(p.id, i); haptic();
+      toast(i === 1 ? 'تقبّل الله دعاءك 🤲' : 'بارك الله فيك');
+      render();
+    });
+    card.querySelector('[data-resolve]').onclick = () => confirmSheet({
+      title: 'عادت الصلة؟',
+      body: `يُرفَع <b>${esc(p.name)}</b> من نيّة الصلح ويعود إلى متابعة الصلة المعتادة. نسأل الله أن يديم الوصل.`,
+      confirm: '🤍 نعم، الحمد لله',
+      cancel: 'ليس بعد',
+      onConfirm: () => { S.resolveRift(p.id); toast('الحمد لله — عادت الصلة 🤍'); render(); }
+    });
+    card.querySelector('[data-edit]').onclick = () => openRiftNote(p);
+    sec.appendChild(card);
+    v.appendChild(sec);
+  });
+
+  const add = el('button', 'btn btn-block', '＋ أضِف مَن أنوي صلحه');
+  add.onclick = () => openRiftPicker();
+  v.appendChild(add);
+
+  const note = el('div', 'card muted');
+  note.style.marginTop = '12px';
+  note.innerHTML = '🔒 ما تكتبه هنا لا يغادر جهازك، ولا يظهر في أي مشاركة أو تصدير تعرضه على أحد.';
+  v.appendChild(note);
+}
+
+function openRiftPicker() {
+  const people = S.activePeople().filter(p => !S.hasRift(p));
+  if (!people.length) return toast('لا يوجد من تضيفه');
+  openSheet(`
+    <h3>مَن أنوي صلحه؟</h3>
+    <p class="sheet-sub">اختر رحمًا بينك وبينه جفوة. لن يظهر في قائمة الإلحاح اليومي بعدها.</p>
+    <div class="guestbox">
+      ${people.map(p => `
+        <button class="guest" type="button" data-r="${p.id}">
+          <span class="avatar" style="--av:${avatarColor(p.id)}">${esc(initials(p.name))}</span>
+          <span class="guest-n">${esc(p.name)}<span>${esc(R.REL_MAP[p.relation]?.label || '')}</span></span>
+          <span class="guest-c">✓</span></button>`).join('')}
+    </div>`,
+    b => b.querySelectorAll('[data-r]').forEach(x => x.onclick = () => {
+      const p = S.getPerson(x.dataset.r);
+      closeSheet(); openRiftNote(p, true);
+    }));
+}
+
+function openRiftNote(p, isNew) {
+  const cur = (p.rift && p.rift.note) || '';
+  openSheet(`
+    <h3>${isNew ? 'نيّة الصلح مع ' + esc(p.name) : 'ملاحظتك'}</h3>
+    <p class="sheet-sub">اكتب لنفسك ما يعينك: ما الذي جرى، وما نيّتك. لا يراه أحد سواك.</p>
+    <label class="field"><span>ملاحظة خاصة (اختياري)</span>
+      <textarea id="r-note" style="min-height:110px" placeholder="مثال: انقطعنا بعد خلاف على الميراث. نيّتي أبدأ بالسلام في العيد.">${esc(cur)}</textarea></label>
+    <button class="btn btn-primary btn-lg" id="r-save">${isNew ? 'أضِفه إلى نيّة الصلح' : 'حفظ'}</button>
+    ${isNew ? '' : `<button class="btn btn-ghost btn-block" id="r-remove" style="margin-top:9px;color:var(--cold)">أزِله من نيّة الصلح</button>`}`,
+    b => {
+      b.querySelector('#r-save').onclick = () => {
+        S.setRift(p.id, true, b.querySelector('#r-note').value.trim());
+        closeSheet(); toast(isNew ? 'أعانك الله — بدأتَ بالنيّة 🤍' : 'حُفظت');
+        go('rift');
+      };
+      const rm = b.querySelector('#r-remove');
+      if (rm) rm.onclick = () => {
+        S.setRift(p.id, false); closeSheet(); toast('أُزيل من نيّة الصلح'); render();
+      };
+    });
 }
 
 /* ══════════════════════════════════════════════════
