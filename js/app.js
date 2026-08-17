@@ -2111,13 +2111,15 @@ function openSeasonSheet() {
    ٧) النصوص
    ══════════════════════════════════════════════════ */
 let textTab = 'hadith';
+let textTag = null;   /* موضوع مُصفّى — يُصفَّر عند تبديل التبويب */
+
 function viewTexts(v) {
   const tabs = el('div', 'texttabs');
   [['hadith', `أحاديث (${T.HADITHS.length})`], ['verse', `آيات (${T.VERSES.length})`], ['dua', `أدعية (${T.DUAS.length})`]]
     .forEach(([k, l]) => {
       const b = el('button', 'fchip', l);
       b.setAttribute('aria-pressed', textTab === k);
-      b.onclick = () => { textTab = k; render(); };
+      b.onclick = () => { textTab = k; textTag = null; render(); };
       tabs.appendChild(b);
     });
   v.appendChild(tabs);
@@ -2127,8 +2129,24 @@ function viewTexts(v) {
   note.innerHTML = `<p class="muted">🛡️ سياسة التوثيق: الأحاديث المعروضة من <b>صحيح البخاري وصحيح مسلم</b> فقط، مع رقم الحديث والراوي. لا يُعرض هنا حديث ضعيف.</p>`;
   v.appendChild(note);
 
+  /* فهرس الموضوعات: الوسوم كانت مطبوعة على البطاقات بلا نفع — الآن تُصفّي */
+  const list = textTab === 'hadith' ? T.HADITHS : textTab === 'verse' ? T.VERSES : T.DUAS;
+  const tagOf = x => textTab === 'dua' ? x.for : x.tag;
+  const tags = [...new Set(list.map(tagOf).filter(Boolean))];
+  if (tags.length > 1) {
+    const fl = el('div', 'filters');
+    [['', 'الكل'], ...tags.map(t => [t, t])].forEach(([val, label]) => {
+      const b = el('button', 'fchip', esc(label));
+      b.setAttribute('aria-pressed', (textTag || '') === val);
+      b.onclick = () => { textTag = val || null; render(); };
+      fl.appendChild(b);
+    });
+    v.appendChild(fl);
+  }
+  const shown = textTag ? list.filter(x => tagOf(x) === textTag) : list;
+
   if (textTab === 'hadith') {
-    T.HADITHS.forEach(h => {
+    shown.forEach(h => {
       const c = el('div', 'tcard');
       c.innerHTML = `<div class="body">${esc(h.text)}</div>
         <div class="foot">
@@ -2141,7 +2159,7 @@ function viewTexts(v) {
       v.appendChild(c);
     });
   } else if (textTab === 'verse') {
-    T.VERSES.forEach(x => {
+    shown.forEach(x => {
       const c = el('div', 'tcard');
       c.innerHTML = `<div class="body q">${esc(x.text)}</div>
         <div class="foot"><span class="badge g">${esc(x.ref)}</span>${x.tag ? `<span class="badge o">${esc(x.tag)}</span>` : ''}</div>`;
@@ -2149,7 +2167,7 @@ function viewTexts(v) {
       v.appendChild(c);
     });
   } else {
-    T.DUAS.forEach(x => {
+    shown.forEach(x => {
       const c = el('div', 'tcard');
       c.innerHTML = `<div class="body q">${esc(x.text)}</div>
         <div class="foot"><span class="badge g">${esc(x.ref)}</span><span class="badge o">${esc(x.for)}</span></div>`;
