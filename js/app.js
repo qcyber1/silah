@@ -1670,6 +1670,7 @@ function viewMore(v) {
       return n && n.enabled ? 'مُفعَّل — يوميًا عند ' + hourLabel(n.hour) : 'مُطفأ — فعّله ليذكّرك';
     })(), 'notifySheet'],
     ['🔤', 'خط التطبيق', (fontList().find(f => f.k === (S.db.settings.font || 'plex')) || FONTS[0]).label, 'fontSheet'],
+    ['🌳', 'شارك شجرتك مع العائلة', 'ملفٌ يستورده قريبك فيبدأ بشجرة جاهزة', 'treeShare'],
     ['🤝', 'نيّة الصلح', (() => {
       const n = S.riftPeople().length;
       if (!n) return 'لمن بينك وبينه جفوة';
@@ -1691,6 +1692,7 @@ function viewMore(v) {
     b.onclick = () => r === 'seasonSheet' ? openSeasonSheet()
                     : r === 'fontSheet'   ? openFontSheet()
                     : r === 'notifySheet' ? openNotifySheet()
+                    : r === 'treeShare'   ? openTreeShareSheet()
                     : go(r);
     box.appendChild(b);
   });
@@ -1846,6 +1848,62 @@ function openFontSheet() {
           y.querySelector('.opt-tick').textContent = y === x ? '✓' : '';
         });
       });
+    });
+}
+
+/* ══ مشاركة الشجرة مع العائلة ═══════════════════════ */
+async function shareTreeFile(withPhones) {
+  const data = S.exportTreeShare(withPhones);
+  const json = JSON.stringify(data, null, 2);
+  const fname = `شجرة-${(S.db.settings.myName || 'صلة').replace(/\s+/g, '-')}.json`;
+  const file = new File([json], fname, { type: 'application/json' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'شجرة أرحامنا',
+        text: 'شجرة العائلة من تطبيق صِلة — افتح التطبيق ثم: المزيد ← نسخة احتياطية ← استيراد.'
+      });
+      return;
+    } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  /* لا مشاركة ملفات؟ نزّله ليُرسَل يدويًا */
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = fname; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('نُزِّل الملف — أرسله لأهلك في الواتساب');
+}
+
+function openTreeShareSheet() {
+  const n = S.activePeople().length;
+  if (!n) return toast('أضف أرحامك أولًا');
+  openSheet(`
+    <h3>شارك شجرتك مع العائلة</h3>
+    <p class="sheet-sub">يستلم قريبك ملفًا يستورده فيبدأ بشجرة جاهزة من ${esc(arPeople(n))} — بدل أن يبنيها من الصفر.</p>
+
+    <div class="card" style="margin-bottom:13px">
+      <div class="section-title" style="margin-bottom:7px">ما الذي يخرج من جهازك؟</div>
+      <p class="muted">✅ الأسماء وصلات القرابة والمدن فقط.<br>
+      🔒 سجل صلتك وملاحظاتك ونيّة الصلح <b style="color:var(--ink)">لا تُغادر جهازك أبدًا</b>.</p>
+    </div>
+
+    <button class="rowlink" id="ts-phones" style="margin-bottom:14px">
+      <span class="e">📞</span>
+      <span class="t">أرفق أرقام الجوال
+        <span class="s">ينفع أهلك — ولا تفعل إن كان فيهم من لا يحب نشر رقمه</span></span>
+      <span class="switch" aria-checked="false"></span>
+    </button>
+
+    <button class="btn btn-primary btn-lg" id="ts-share">📤 أرسل الشجرة</button>`,
+    b => {
+      let phones = false;
+      const sw = b.querySelector('#ts-phones .switch');
+      b.querySelector('#ts-phones').onclick = () => {
+        phones = !phones; sw.setAttribute('aria-checked', phones); haptic();
+      };
+      b.querySelector('#ts-share').onclick = () => { closeSheet(); shareTreeFile(phones); };
     });
 }
 
@@ -2837,6 +2895,27 @@ function viewBackup(v) {
       incoming = JSON.parse(text);
       if (!incoming || !Array.isArray(incoming.people)) throw new Error('الملف لا يحتوي بيانات «صِلة».');
     } catch (e) { return failSheet(e.message); }
+
+    /* ملف شجرة عائلية؟ مساره أبسط: إضافة الجديد فقط، لا استبدال أصلًا */
+    if (incoming.kind === 'silah-tree') {
+      confirmSheet({
+        title: incoming.from ? `شجرة من ${incoming.from} 🌳` : 'شجرة عائلية 🌳',
+        body: `فيها <b>${esc(arPeople(incoming.people.length))}</b>. يُضاف الجديد فقط —
+               من عندك يبقى كما هو، ولا يُستبدل شيء.`,
+        confirm: '🌿 أضِف الجديد',
+        cancel: 'إلغاء',
+        onConfirm: () => {
+          try {
+            const r = S.importTreeShare(incoming);
+            toast(r.added
+              ? `أُضيف ${arPeople(r.added)}${r.skipped ? ' · تُخطّي ' + r.skipped + ' موجودًا' : ''} 🌿`
+              : 'كلهم عندك بالفعل — لم يُضَف أحد');
+            go('tree');
+          } catch (e) { failSheet(e.message); }
+        }
+      });
+      return;
+    }
 
     const run = mode => {
       try { S.importJSON(text, mode); toast('تم الاستيراد بنجاح'); go('today'); }

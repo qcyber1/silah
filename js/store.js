@@ -564,6 +564,41 @@ function streakDays() {
   return n;
 }
 
+/* ══ مشاركة الشجرة مع العائلة ═══════════════════════
+   ملفٌ يُرسَل في الواتساب فيستورده القريب ويبدأ بشجرة جاهزة بدل الصفر.
+   خصوصية صارمة: الأسماء والقرابات والمدن فقط — أما سجل الصلة والملاحظات
+   ونيّة الصلح فلا تُغادر الجهاز أبدًا، والأرقام بموافقة صريحة.
+   ═════════════════════════════════════════════════ */
+function exportTreeShare(withPhones) {
+  return {
+    kind: 'silah-tree',
+    v: 1,
+    from: DB.settings.myName || '',
+    at: new Date().toISOString(),
+    people: activePeople().map(p => ({
+      name: p.name,
+      relation: p.relation,
+      city: p.city || '',
+      ...(withPhones && p.phone ? { phone: p.phone } : {})
+    }))
+  };
+}
+
+/* الاستيراد: الجديد فقط — المكرّر بالاسم المطبَّع + القرابة يُتخطّى */
+function importTreeShare(data) {
+  if (!data || data.kind !== 'silah-tree' || !Array.isArray(data.people)) {
+    throw new Error('ليس ملف شجرة من «صِلة».');
+  }
+  let added = 0, skipped = 0;
+  data.people.forEach(x => {
+    if (!x.name || !window.REL.REL_MAP[x.relation]) { skipped++; return; }
+    if (findDuplicates(x.name, x.relation).length) { skipped++; return; }
+    addPerson({ name: x.name, relation: x.relation, city: x.city, phone: x.phone });
+    added++;
+  });
+  return { added, skipped };
+}
+
 /* ── النسخ الاحتياطي ───────────────────────────────── */
 function exportJSON() {
   const blob = new Blob([JSON.stringify(DB, null, 2)], { type: 'application/json' });
@@ -612,5 +647,6 @@ window.STORE = {
   RIFT_STEPS, hasRift, riftPeople, setRift, markRiftStep, resolveRift, riftNudge, markNudged,
   activeSeason, seasonKey, greetedList, hasGreeted, toggleGreeted, greetingOrder,
   reachedToday, duaToday, currentHijriYear, pilgrims, toggleHajj, hajjPhase,
+  exportTreeShare, importTreeShare,
   exportJSON, importJSON, wipe
 };
