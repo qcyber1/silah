@@ -2603,10 +2603,109 @@ async function shareText(text, label) {
   }
 }
 
+/* ── صورة قائمة المعايدة ──────────────────────────
+   تذكيرٌ جماعي يُرمى في قروب العائلة: الأسماء بدرجاتها فقط،
+   أما مَن عايدتَ ومَن بقي فشأنك وحدك ولا يظهر. */
+async function shareGreetingImage(season) {
+  const rows = S.greetingOrder(null);
+  if (!rows.length) return toast('أضف أرحامك أولًا');
+  await document.fonts.ready;
+
+  const W = 1080, PAD = 60, CHIP_H = 76, CHIP_GAP = 16, TIER_GAP = 40, LABEL_H = 54;
+  const meas = document.createElement('canvas').getContext('2d');
+  const font = (w, s) => `${w} ${s}px Cairo, sans-serif`;
+
+  const tiers = [[], [], []];
+  rows.forEach(({ p, s }) => tiers[(s.tier || 3) - 1].push(p));
+  const blocks = tiers.map((list, i) => {
+    meas.font = font(700, 28);
+    const chips = list.map(p => ({
+      name: p.name,
+      w: Math.min(430, Math.max(140, meas.measureText(p.name).width + 52))
+    }));
+    const lines = [[]]; let x = 0;
+    chips.forEach(c => {
+      if (x + c.w > W - PAD * 2 && lines[lines.length - 1].length) { lines.push([]); x = 0; }
+      lines[lines.length - 1].push(c); x += c.w + CHIP_GAP;
+    });
+    return { label: R.TIERS[i + 1].label, lines, count: list.length };
+  }).filter(b => b.count);
+
+  const HEAD = 240, FOOT = 110;
+  const bodyH = blocks.reduce((a, b) =>
+    a + LABEL_H + b.lines.length * (CHIP_H + CHIP_GAP) + TIER_GAP, 0);
+  const H = HEAD + bodyH + FOOT;
+
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#1a6b52'); bg.addColorStop(1, '#0a3a2b');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  /* هلال العيد */
+  g.strokeStyle = 'rgba(240,180,81,.9)'; g.lineWidth = 7;
+  g.beginPath(); g.arc(W - 130, 118, 46, .55 * Math.PI, 1.75 * Math.PI); g.stroke();
+
+  g.textAlign = 'center'; g.direction = 'rtl';
+  g.fillStyle = '#ffffff'; g.font = font(800, 52);
+  g.fillText(`معايدة ${season.label}`, W / 2, 100);
+  g.fillStyle = '#f0b451'; g.font = font(600, 30);
+  g.fillText(S.db.settings.myName ? `عائلة ${S.db.settings.myName}` : 'قائمة أرحامنا', W / 2, 156);
+  g.fillStyle = 'rgba(255,255,255,.75)'; g.font = font(600, 24);
+  g.fillText('لا تنسوا أحدًا من الصلة والمعايدة 🤍', W / 2, 202);
+
+  let y = HEAD;
+  blocks.forEach(b => {
+    g.textAlign = 'right';
+    g.fillStyle = '#f0b451'; g.font = font(700, 26);
+    g.fillText(`${b.label} (${b.count})`, W - PAD, y + 30);
+    g.strokeStyle = 'rgba(255,255,255,.2)'; g.lineWidth = 2;
+    const tw = g.measureText(`${b.label} (${b.count})`).width;
+    g.beginPath(); g.moveTo(PAD, y + 22); g.lineTo(W - PAD - tw - 22, y + 22); g.stroke();
+    y += LABEL_H;
+    b.lines.forEach(line => {
+      const total = line.reduce((a, c) => a + c.w, 0) + (line.length - 1) * CHIP_GAP;
+      let x = W - (W - total) / 2;
+      line.forEach(c => {
+        const cx = x - c.w;
+        g.fillStyle = 'rgba(255,255,255,.13)';
+        g.beginPath(); g.roundRect(cx, y, c.w, CHIP_H, 18); g.fill();
+        g.textAlign = 'center';
+        g.fillStyle = '#ffffff'; g.font = font(700, 28);
+        g.fillText(c.name, cx + c.w / 2, y + 48, c.w - 22);
+        x -= c.w + CHIP_GAP;
+      });
+      y += CHIP_H + CHIP_GAP;
+    });
+    y += TIER_GAP;
+  });
+
+  g.textAlign = 'center';
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(600, 24);
+  g.fillText('تقبّل الله منا ومنكم · تطبيق صِلة', W / 2, H - 46);
+
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  const file = new File([blob], 'قائمة-المعايدة.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'قائمة المعايدة' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'قائمة-المعايدة.png'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  toast('نُزِّلت قائمة المعايدة 🖼️');
+}
+
 /* ── شاشة قائمة المعايدة ──────────────────────────── */
 function viewGreeting(v) {
   const s = S.activeSeason();
   if (!s || !s.greeting) { go('today'); return; }
+
+  const imgB = el('button', 'tb-btn', '🖼️ صورة');
+  imgB.onclick = () => { toast('نجهّز الصورة…'); shareGreetingImage(s).catch(() => toast('تعذّر إنشاء الصورة')); };
+  $('#tb-action').appendChild(imgB);
 
   const rows = S.greetingOrder(s);
   if (!rows.length) {
