@@ -90,8 +90,8 @@
   /* periodicSync متاح للتطبيق المثبَّت على كروم/أندرويد */
   async function registerPeriodic() {
     try {
-      const reg = await navigator.serviceWorker.ready;
-      if (!('periodicSync' in reg)) return false;
+      const reg = await swReady();
+      if (!reg || !('periodicSync' in reg)) return false;
       const st = await navigator.permissions.query({ name: 'periodic-background-sync' });
       if (st.state !== 'granted') return false;
       await reg.periodicSync.register('silah-daily', { minInterval: 12 * 60 * 60 * 1000 });
@@ -101,8 +101,8 @@
 
   async function unregisterPeriodic() {
     try {
-      const reg = await navigator.serviceWorker.ready;
-      if ('periodicSync' in reg) await reg.periodicSync.unregister('silah-daily');
+      const reg = await swReady();
+      if (reg && 'periodicSync' in reg) await reg.periodicSync.unregister('silah-daily');
     } catch (e) { /* لم يكن مسجَّلًا */ }
   }
 
@@ -146,14 +146,21 @@
     return 'granted';
   }
 
-  /* حالة الدعم لعرضها بصدق في الإعدادات */
+  /* حالة الدعم لعرضها بصدق في الإعدادات.
+     serviceWorker.ready لا يُرفَض أبدًا — إن غاب العامل علِق انتظاره إلى
+     الأبد وجمّد ورقة الإعدادات، فيُسابَق بمهلة قصيرة. */
+  const swReady = (ms = 1500) => Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise(res => setTimeout(() => res(null), ms))
+  ]);
+
   async function capability() {
     const out = { supported: supported(), permission: permission(), periodic: false, installed: false };
     out.installed = window.matchMedia('(display-mode: standalone)').matches ||
                     window.navigator.standalone === true;
     try {
-      const reg = await navigator.serviceWorker.ready;
-      out.periodic = 'periodicSync' in reg;
+      const reg = await swReady();
+      if (reg) out.periodic = 'periodicSync' in reg;
     } catch (e) { /* لا عامل خدمة */ }
     return out;
   }
