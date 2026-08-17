@@ -264,6 +264,7 @@ document.querySelectorAll('.tab').forEach(b =>
    العرض الرئيسي
    ══════════════════════════════════════════════════ */
 function render() {
+  applySeasonTheme();   /* الموسم قد ينقلب أثناء الجلسة (منتصف ليلة رمضان مثلًا) */
   const v = $('#view');
   const title = $('#tb-title');
   const back = $('#tb-back');
@@ -364,6 +365,13 @@ function viewToday(v) {
     return;
   }
 
+  /* ترتيب مقصود: لحظة الصلح الأسبوعية ← قرار اليوم ← التسجيل السريع
+     ← اللقاء ← المناسبات ← إداريات (النسخة) ← الآية ختامًا. */
+
+  /* نيّة الصلح — واحدٌ فقط، ومرة كل أسبوع */
+  const rift = S.riftNudge();
+  if (rift) v.appendChild(riftCard(rift));
+
   /* من يستحق صلتك اليوم */
   const sug = S.suggestions(3);
   const sec = el('div', 'section');
@@ -382,11 +390,25 @@ function viewToday(v) {
   }
   v.appendChild(sec);
 
+  /* شريط التسجيل السريع — مصمَّم لمن يتصل ثم يسجّل، لا العكس */
+  v.appendChild(quickLogStrip());
+
   /* اللقاء القادم */
   const g = S.activeGathering();
   if (g) v.appendChild(gatheringHero(g));
 
-  /* تذكير النسخة الاحتياطية — البيانات محلية، وضياعها لا يُسترجع.
+  /* مناسبات قريبة */
+  const occ = S.upcomingOccasions(10);
+  if (occ.length) {
+    const os = el('div', 'section');
+    os.appendChild(el('div', 'section-head',
+      `<span class="section-title">مناسبات قريبة</span><button class="section-more" data-go="occ">الكل</button>`));
+    occ.slice(0, 3).forEach(o => os.appendChild(occRow(o)));
+    os.querySelector('[data-go]').onclick = () => go('occ');
+    v.appendChild(os);
+  }
+
+  /* تذكير النسخة الاحتياطية — إداريّ، فمكانه أسفل الصفحة لا وسط قراراتها.
      يظهر بعد شجرة معتبرة، وشهرًا بعد آخر تصدير، ويُصرَف بلا إلحاح. */
   const bk = S.db.settings.backup || {};
   const sinceBackup = bk.lastExport ? (Date.now() - new Date(bk.lastExport)) / 86400000 : Infinity;
@@ -414,24 +436,6 @@ function viewToday(v) {
       S.save(); render();
     };
     v.appendChild(w);
-  }
-
-  /* نيّة الصلح — واحدٌ فقط، ومرة كل أسبوع */
-  const rift = S.riftNudge();
-  if (rift) v.appendChild(riftCard(rift));
-
-  /* شريط التسجيل السريع — مصمَّم لمن يتصل ثم يسجّل، لا العكس */
-  v.appendChild(quickLogStrip());
-
-  /* مناسبات قريبة */
-  const occ = S.upcomingOccasions(10);
-  if (occ.length) {
-    const os = el('div', 'section');
-    os.appendChild(el('div', 'section-head',
-      `<span class="section-title">مناسبات قريبة</span><button class="section-more" data-go="occ">الكل</button>`));
-    occ.slice(0, 3).forEach(o => os.appendChild(occRow(o)));
-    os.querySelector('[data-go]').onclick = () => go('occ');
-    v.appendChild(os);
   }
 
   /* نص اليوم */
