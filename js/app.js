@@ -917,7 +917,7 @@ function viewPerson(v, id) {
       const row = el('div', 'occ');
       row.innerHTML = `<span class="e">${k.icon}</span>
         <div class="pc-main"><div class="pc-name">${esc(oc.title || k.label)}</div>
-        <div class="pc-rel">${dd || '?'} ${AR_MONTHS[(mm || 1) - 1]} — سنويًا</div></div>
+        <div class="pc-rel">${dd || '?'} ${esc((oc.cal === 'h' && window.SEASON ? window.SEASON.HIJRI_MONTHS : AR_MONTHS)[(mm || 1) - 1])}${oc.cal === 'h' ? ' 🌙' : ''} — سنويًا</div></div>
         <button class="btn btn-ghost" style="padding:6px 10px" data-del>🗑</button>`;
       row.querySelector('[data-del]').onclick = () => {
         S.updatePerson(p.id, { occasions: p.occasions.filter(x => x.id !== oc.id) });
@@ -1063,33 +1063,56 @@ function openLogSheet(p) {
 
 /* ── ورقة المناسبة ────────────────────────────────── */
 function openOccasionSheet(p) {
+  const hijriOk = !!(window.SEASON && window.SEASON.hijri());
   openSheet(`
     <h3>مناسبة لـ${esc(p.name)}</h3>
-    <p class="sheet-sub">تُذكِّرك صِلة قبل موعدها.</p>
+    <p class="sheet-sub">تُذكِّرك صِلة قبل موعدها كلَّ عام.</p>
     <div class="relchips" id="okinds" style="margin-bottom:14px">
       ${R.OCCASION_KINDS.map((k, i) => `<button class="relchip" data-k="${k.key}" aria-pressed="${i === 0}">${k.icon} ${k.label}</button>`).join('')}
     </div>
     <label class="field"><span>العنوان</span><input id="otitle" type="text" placeholder="مثال: ميلاد أبي"></label>
+
+    ${hijriOk ? `
+    <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:2px 0 8px">التقويم</div>
+    <div class="relchips" id="ocal" style="margin-bottom:13px">
+      <button class="relchip" data-cal="g" aria-pressed="true">ميلادي</button>
+      <button class="relchip" data-cal="h" aria-pressed="false">هجري 🌙</button>
+    </div>` : ''}
+
     <div class="field-row">
-      <label class="field"><span>اليوم</span><input id="oday" type="number" min="1" max="31" inputmode="numeric" placeholder="١٥"></label>
+      <label class="field"><span>اليوم</span><input id="oday" type="number" min="1" max="31" inputmode="numeric" placeholder="15"></label>
       <label class="field"><span>الشهر</span>
         <select id="omonth">${AR_MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('')}</select></label>
     </div>
     <button class="btn btn-primary btn-lg" id="osave">حفظ المناسبة</button>`,
     body => {
       let kind = R.OCCASION_KINDS[0].key;
+      let cal = 'g';
+      const monthSel = body.querySelector('#omonth');
+      const daysIn = () => cal === 'h' ? 30 : 31;
+
       body.querySelectorAll('#okinds .relchip').forEach(b => b.onclick = () => {
         kind = b.dataset.k;
         body.querySelectorAll('#okinds .relchip').forEach(x => x.setAttribute('aria-pressed', x === b));
       });
+      body.querySelectorAll('#ocal [data-cal]').forEach(b => b.onclick = () => {
+        cal = b.dataset.cal;
+        body.querySelectorAll('#ocal [data-cal]').forEach(x => x.setAttribute('aria-pressed', x === b));
+        const months = cal === 'h' ? window.SEASON.HIJRI_MONTHS : AR_MONTHS;
+        monthSel.innerHTML = months.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+        body.querySelector('#oday').max = daysIn();
+        haptic();
+      });
+
       body.querySelector('#osave').onclick = () => {
         const d = Number(body.querySelector('#oday').value);
-        const m = Number(body.querySelector('#omonth').value);
-        if (!d || d < 1 || d > 31) return toast('أدخل يومًا صحيحًا');
+        const m = Number(monthSel.value);
+        if (!d || d < 1 || d > daysIn()) return toast('أدخل يومًا صحيحًا');
         const list = (p.occasions || []).concat([{
           id: S.uid(), kind,
           title: body.querySelector('#otitle').value.trim() || R.OCCASION_MAP[kind].label,
-          date: String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0')
+          date: String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0'),
+          ...(cal === 'h' ? { cal: 'h' } : {})
         }]);
         S.updatePerson(p.id, { occasions: list });
         closeSheet(); toast('أُضيفت المناسبة'); render();

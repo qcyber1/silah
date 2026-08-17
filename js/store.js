@@ -250,7 +250,19 @@ function suggestions(limit = 3) {
 }
 
 /* ── المناسبات ─────────────────────────────────────── */
-/* التواريخ تُخزَّن 'MM-DD' (سنوية) — نعيدها مع عدد الأيام المتبقية */
+/* 'MM-DD' سنوية. oc.cal === 'h' تجعلها هجرية، وغيابه ميلادي (توافقًا مع القديم).
+   حساب الهجري مسحٌ يوميٌّ عبر Intl — يُحفَظ لليوم كي لا يتكرر لكل مناسبة. */
+const hijriMemo = {};
+function daysToHijriDate(mm, dd) {
+  const key = `${mm}-${dd}-${new Date().toDateString()}-${DB.settings.hijriOffset || 0}`;
+  if (key in hijriMemo) return hijriMemo[key];
+  const v = window.SEASON
+    ? window.SEASON.daysUntilHijri(mm, dd, DB.settings.hijriOffset || 0)
+    : null;
+  hijriMemo[key] = v;
+  return v;
+}
+
 function upcomingOccasions(withinDays = 14) {
   const out = [];
   const now = new Date();
@@ -261,9 +273,16 @@ function upcomingOccasions(withinDays = 14) {
       if (!oc.date) return;
       const [mm, dd] = oc.date.split('-').map(Number);
       if (!mm || !dd) return;
-      let next = new Date(today.getFullYear(), mm - 1, dd);
-      if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
-      const inDays = Math.round((next - today) / DAY);
+      let inDays, next;
+      if (oc.cal === 'h') {
+        inDays = daysToHijriDate(mm, dd);
+        if (inDays === null) return;          /* متصفح بلا تقويم هجري */
+        next = new Date(today.getTime() + inDays * DAY);
+      } else {
+        next = new Date(today.getFullYear(), mm - 1, dd);
+        if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
+        inDays = Math.round((next - today) / DAY);
+      }
       if (inDays <= withinDays) out.push({ person: p, oc, inDays, date: next });
     });
   });
