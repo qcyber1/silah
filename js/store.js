@@ -121,6 +121,15 @@ function deleteEvent(id) {
   save();
 }
 
+/* لإلحاق ملاحظة بعد التسجيل — «وش صار؟» تُكتب بعد المكالمة لا قبلها */
+function updateEventNote(id, note) {
+  const e = DB.events.find(x => x.id === id);
+  if (!e) return null;
+  e.note = String(note || '').trim();
+  save();
+  return e;
+}
+
 /* ── التراجع ────────────────────────────────────────
    يحتفظ بآخر تسجيل ليُلغى بضغطة، فالخطأ في الشريط السريع
    لا يُصلَّح إلا بفتح صفحة الشخص. */
@@ -593,7 +602,7 @@ window.STORE = {
   set onSaveError(fn) { onSaveError = fn; },
   load, save, uid,
   addPerson, updatePerson, deletePerson, getPerson, activePeople,
-  addEvent, deleteEvent, eventsOf, lastContact, lastDua,
+  addEvent, deleteEvent, updateEventNote, eventsOf, lastContact, lastDua,
   undoable, undoLastEvent, findDuplicates, normalizeName,
   isSnoozed, snooze, unsnooze,
   statusOf, STATE_META, priorityOf, suggestions,

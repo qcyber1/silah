@@ -251,6 +251,12 @@ a{color:var(--green);text-decoration:none}
   margin-top:11px;font-size:13px;background:var(--stbg);color:var(--st);
   padding:7px 11px;border-radius:10px;font-weight:700
 }
+/* آخر ما دار بينكما — سياقٌ يجعل الاتصال التالي أسهل افتتاحًا */
+.sug-note{
+  margin-top:8px;font-size:12.5px;color:var(--ink-2);line-height:1.7;
+  border-inline-start:2px solid var(--line);padding-inline-start:9px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden
+}
 .sug-actions{display:flex;gap:8px;margin-top:12px}
 .sug-actions .btn{flex:1}
 

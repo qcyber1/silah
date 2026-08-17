@@ -123,27 +123,52 @@ function avatarColor(id) {
 }
 
 let toastTimer;
-function toast(msg, undo) {
+function toast(msg, undo, note) {
   const t = $('#toast');
   clearTimeout(toastTimer);
   t.innerHTML = '';
   t.appendChild(document.createTextNode(msg));
+  if (note) {
+    const nb = el('button', 'toast-undo', '📝 وش صار؟');
+    nb.onclick = () => { t.hidden = true; clearTimeout(toastTimer); note(); };
+    t.appendChild(nb);
+  }
   if (undo) {
     const b = el('button', 'toast-undo', 'تراجع');
     b.onclick = () => { t.hidden = true; clearTimeout(toastTimer); undo(); };
     t.appendChild(b);
   }
   t.hidden = false;
-  toastTimer = setTimeout(() => { t.hidden = true; }, undo ? 5200 : 2100);
+  toastTimer = setTimeout(() => { t.hidden = true; }, (undo || note) ? 5600 : 2100);
 }
 
-/* تسجيل صلة مع إتاحة التراجع — المسار الوحيد لكل تسجيل من زرّ سريع */
+/* ملاحظة ما بعد المكالمة: سطرٌ يُكتب الآن يذكّرك المرة القادمة بآخر ما دار */
+function openEventNote(ev, person) {
+  openSheet(`
+    <h3>وش صار مع ${esc(person.name.split(/\s+/)[0])}؟</h3>
+    <p class="sheet-sub">سطرٌ واحد يكفي — يظهر في سجلّه فيذكّرك في المرة القادمة.</p>
+    <label class="field">
+      <input id="ev-note" type="text" placeholder="مثال: بشّرني بوظيفة جديدة، أتابع معه الأسبوع الجاي"
+             value="${esc(ev.note || '')}" enterkeyhint="done"></label>
+    <button class="btn btn-primary btn-lg" id="ev-save">حفظ</button>`,
+    b => {
+      const inp = b.querySelector('#ev-note');
+      const save = () => {
+        S.updateEventNote(ev.id, inp.value);
+        closeSheet(); toast('حُفظت الملاحظة'); render();
+      };
+      b.querySelector('#ev-save').onclick = save;
+      inp.onkeydown = e => { if (e.key === 'Enter') save(); };
+    });
+}
+
+/* تسجيل صلة مع إتاحة التراجع والملاحظة — المسار الوحيد لكل تسجيل سريع */
 function logContact(person, type, note, msg) {
-  S.addEvent(person.id, type, note);
+  const ev = S.addEvent(person.id, type, note);
   haptic();
-  toast(msg, () => {
-    if (S.undoLastEvent()) { toast('أُلغي التسجيل'); render(); }
-  });
+  toast(msg,
+    () => { if (S.undoLastEvent()) { toast('أُلغي التسجيل'); render(); } },
+    () => openEventNote(ev, person));
   setTimeout(render, 550);
 }
 
@@ -454,6 +479,8 @@ function suggestionCard(p, s) {
   const reason = s.last
     ? `آخر ${R.ACTION_MAP[s.last.type]?.label || 'تواصل'} ${agoText(s.days)} · الدورة المقترحة ${cadenceText(s.cadence)}`
     : `لم تُسجَّل صلة بعد · الدورة المقترحة ${cadenceText(s.cadence)}`;
+  /* آخر ما دار بينكما — هنا تثمر ملاحظة «وش صار؟» */
+  const lastNote = s.last && s.last.note ? s.last.note : '';
 
   c.innerHTML = `
     <div class="sug-head">
@@ -465,6 +492,7 @@ function suggestionCard(p, s) {
       <div class="sug-over">${s.ratio > 1 ? '×' + s.ratio.toFixed(1) : ''}</div>
     </div>
     <div class="sug-reason">${esc(reason)}</div>
+    ${lastNote ? `<div class="sug-note">💬 ${esc(lastNote)}</div>` : ''}
     <div class="sug-actions">
       ${p.phone ? `<a class="btn btn-primary" href="tel:${esc(p.phone)}" data-call>📞 اتصل الآن</a>` : `<button class="btn btn-primary" data-log>✔️ سجّل صلة</button>`}
       <button class="btn" data-open>التفاصيل</button>
@@ -1914,8 +1942,24 @@ function viewStats(v) {
     </div>`;
   v.appendChild(health);
 
-  /* من لم تصله أبدًا */
-  const never = people.filter(p => !S.lastContact(p.id));
+  /* المسارات الخاصة: يفسّران «المنقطعين» بدل أن يتضخّم الرقم بصمت */
+  const rifts = S.riftPeople().length;
+  const snoozed = people.filter(p => S.isSnoozed(p)).length;
+  if (rifts || snoozed) {
+    const sp = el('div', 'card');
+    sp.style.marginTop = '12px';
+    sp.innerHTML = `<div class="section-title" style="margin-bottom:8px">خارج الإلحاح اليومي</div>
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        ${rifts ? `<button class="badge" style="background:#4a7ea31a;color:#4a7ea3;border:none;padding:7px 13px;font-size:12.5px" data-go-rift>🤝 ${esc(arPeople(rifts))} في نيّة الصلح</button>` : ''}
+        ${snoozed ? `<span class="badge o" style="padding:7px 13px;font-size:12.5px">⏱ ${esc(arPeople(snoozed))} مؤجَّلون</span>` : ''}
+      </div>`;
+    const gr = sp.querySelector('[data-go-rift]');
+    if (gr) gr.onclick = () => go('rift');
+    v.appendChild(sp);
+  }
+
+  /* من لم تصله أبدًا — المؤجَّل استُثني بقرارك فلا يُعاد عرضه هنا */
+  const never = people.filter(p => !S.lastContact(p.id) && !S.isSnoozed(p) && !S.hasRift(p));
   if (never.length) {
     const sec = el('div', 'section');
     sec.style.marginTop = '18px';
