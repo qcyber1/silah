@@ -1571,6 +1571,10 @@ function viewTree(v) {
     return;
   }
 
+  const shareB = el('button', 'tb-btn', '🖼️ صورة');
+  shareB.onclick = () => { toast('نجهّز الصورة…'); shareTreeImage().catch(() => toast('تعذّر إنشاء الصورة')); };
+  $('#tb-action').appendChild(shareB);
+
   const legend = el('div', 'card');
   legend.innerHTML = `<div class="legend">
       <span>🟢 موصول</span><span>🟡 قارب</span><span>🔴 يحتاج صلة</span><span>⚪ جديد</span>
@@ -1650,6 +1654,124 @@ function viewTree(v) {
         `<span><b style="color:${R.SIDES[k].color}">●</b> ${R.SIDES[k].label}: ${n}</span>`).join('')}
     </div>`;
   v.appendChild(dist);
+}
+
+/* ── صورة الشجرة ──────────────────────────────────
+   لقروب العائلة: أسماء وقرابات فقط — لا حالات صلة، فتلك خاصة بك. */
+async function shareTreeImage() {
+  const people = S.activePeople();
+  if (!people.length) return toast('أضف أرحامك أولًا');
+  await document.fonts.ready;
+
+  const LEVELS = [
+    { lv: -2, label: 'الأجداد والجدّات' },
+    { lv: -1, label: 'الوالدان والأعمام والأخوال' },
+    { lv: 0,  label: 'الإخوة وأبناء العمومة', me: true },
+    { lv: 1,  label: 'الأبناء وأبناء الإخوة' },
+    { lv: 2,  label: 'الأحفاد' }
+  ];
+  const byLevel = {};
+  people.forEach(p => {
+    const r = R.REL_MAP[p.relation]; if (!r) return;
+    (byLevel[r.level] = byLevel[r.level] || []).push(p);
+  });
+
+  const W = 1080, PAD = 60, CHIP_H = 84, CHIP_GAP = 18, ROW_GAP = 46, LABEL_H = 56;
+  const ctx0 = document.createElement('canvas').getContext('2d');
+  const font = (w, s) => `${w} ${s}px Cairo, sans-serif`;
+
+  /* قِس أولًا لتُحسب الأسطر والارتفاع */
+  const rows = [];
+  LEVELS.forEach(L => {
+    const list = (byLevel[L.lv] || []).slice()
+      .sort((a, b) => R.REL_MAP[a.relation].order - R.REL_MAP[b.relation].order);
+    const chips = [];
+    if (L.me) chips.push({ name: S.db.settings.myName || 'أنا', rel: '★', me: true });
+    list.forEach(p => chips.push({ name: p.name, rel: R.REL_MAP[p.relation].label }));
+    if (!chips.length) return;
+    ctx0.font = font(700, 30);
+    chips.forEach(c => c.w = Math.min(430, Math.max(150,
+      Math.max(ctx0.measureText(c.name).width, ctx0.measureText(c.rel).width * .8) + 56)));
+    /* لفّ الرقائق في أسطر */
+    const lines = [[]]; let x = 0;
+    chips.forEach(c => {
+      if (x + c.w > W - PAD * 2 && lines[lines.length - 1].length) { lines.push([]); x = 0; }
+      lines[lines.length - 1].push(c); x += c.w + CHIP_GAP;
+    });
+    rows.push({ label: L.label, lines });
+  });
+
+  const HEAD = 190, FOOT = 110;
+  const bodyH = rows.reduce((a, r) =>
+    a + LABEL_H + r.lines.length * (CHIP_H + CHIP_GAP) + ROW_GAP, 0);
+  const H = HEAD + bodyH + FOOT;
+
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+
+  /* الأرضية */
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0e7a5f'); bg.addColorStop(1, '#083e31');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+  /* الترويسة */
+  g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.direction = 'rtl';
+  g.font = font(800, 56);
+  g.fillText(`شجرة أرحام ${S.db.settings.myName || 'عائلتنا'}`, W / 2, 92);
+  g.fillStyle = '#f5c76a'; g.font = font(600, 30);
+  g.fillText('«مَنْ وَصَلَنِي وَصَلَهُ اللَّهُ»', W / 2, 148);
+
+  /* الصفوف */
+  let y = HEAD;
+  rows.forEach(row => {
+    g.fillStyle = 'rgba(255,255,255,.65)'; g.font = font(700, 26);
+    g.textAlign = 'right';
+    g.fillText(row.label, W - PAD, y + 30);
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 2;
+    const tw = g.measureText(row.label).width;
+    g.beginPath(); g.moveTo(PAD, y + 22); g.lineTo(W - PAD - tw - 22, y + 22); g.stroke();
+    y += LABEL_H;
+
+    row.lines.forEach(line => {
+      const total = line.reduce((a, c) => a + c.w, 0) + (line.length - 1) * CHIP_GAP;
+      let x = W - (W - total) / 2;          /* ابدأ من اليمين — RTL */
+      line.forEach(c => {
+        const cx = x - c.w;
+        g.fillStyle = c.me ? '#f5c76a' : 'rgba(255,255,255,.13)';
+        g.beginPath();
+        g.roundRect(cx, y, c.w, CHIP_H, 20);
+        g.fill();
+        g.textAlign = 'center';
+        g.fillStyle = c.me ? '#1d2b17' : '#ffffff';
+        g.font = font(700, 30);
+        g.fillText(c.name, cx + c.w / 2, y + 38, c.w - 24);
+        g.fillStyle = c.me ? 'rgba(29,43,23,.75)' : 'rgba(255,255,255,.62)';
+        g.font = font(600, 22);
+        g.fillText(c.rel, cx + c.w / 2, y + 68, c.w - 24);
+        x -= c.w + CHIP_GAP;
+      });
+      y += CHIP_H + CHIP_GAP;
+    });
+    y += ROW_GAP;
+  });
+
+  /* التذييل */
+  g.textAlign = 'center';
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(600, 24);
+  g.fillText(`${arPeople(people.length)} · تطبيق صِلة`, W / 2, H - 46);
+
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  const file = new File([blob], 'شجرة-الأرحام.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'شجرة أرحامنا' }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'شجرة-الأرحام.png'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  toast('نُزِّلت صورة الشجرة 🌳');
 }
 
 /* ══════════════════════════════════════════════════
