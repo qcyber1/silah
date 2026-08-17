@@ -1319,6 +1319,10 @@ function openBulkAddSheet(preRel) {
 
     <label class="field"><span>الأسماء — اسم في كل سطر</span>
       <textarea id="b-names" style="min-height:132px;line-height:2" placeholder="فهد&#10;خالد&#10;سعود&#10;عبدالرحمن"></textarea></label>
+    ${('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
+      ? `<button class="btn btn-block" id="b-mic" type="button">🎤 أملِ الأسماء بصوتك</button>
+         <div class="hint">قل: «فهد، خالد، سعود» — كل اسم ينزل في سطر.</div>`
+      : ''}
     <div class="hint" id="b-count">لم تكتب أسماءً بعد</div>
 
     <label class="field" style="margin-top:13px"><span>المدينة (تُطبَّق على الجميع — اختياري)</span>
@@ -1345,6 +1349,48 @@ function openBulkAddSheet(preRel) {
     });
     ta.oninput = refresh;
     refresh();
+
+    /* الإملاء الصوتي: «فهد، خالد وسعود» → ثلاثة أسطر */
+    const mic = body.querySelector('#b-mic');
+    if (mic) {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let rec = null;
+      const stop = () => {
+        if (rec) { try { rec.stop(); } catch (e) {} rec = null; }
+        mic.textContent = '🎤 أملِ الأسماء بصوتك';
+        mic.classList.remove('btn-danger-solid');
+      };
+      mic.onclick = () => {
+        if (rec) return stop();
+        rec = new SR();
+        rec.lang = 'ar-SA';
+        rec.continuous = true;
+        rec.interimResults = false;
+        rec.onresult = ev => {
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            if (!ev.results[i].isFinal) continue;
+            const heard = ev.results[i][0].transcript;
+            const parts = heard.split(/[،,]|\sو(?=\s?\S)/).map(s => s.trim()).filter(Boolean);
+            if (parts.length) {
+              ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + parts.join('\n');
+              refresh(); haptic();
+            }
+          }
+        };
+        rec.onerror = e => {
+          stop();
+          toast(e.error === 'not-allowed'
+            ? 'رُفض إذن اللاقط — فعّله من إعدادات المتصفح'
+            : 'تعذّر الإملاء — اكتب الأسماء يدويًا');
+        };
+        rec.onend = stop;
+        try {
+          rec.start();
+          mic.textContent = '⏺️ يسمعك الآن — اضغط للإيقاف';
+          mic.classList.add('btn-danger-solid');
+        } catch (e) { stop(); }
+      };
+    }
 
     btn.onclick = () => {
       const list = names();
