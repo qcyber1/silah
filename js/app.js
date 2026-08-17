@@ -301,10 +301,17 @@ function viewToday(v) {
     const bulk = el('button', 'btn btn-block', '⚡ أو أضِفهم دفعة واحدة');
     bulk.style.marginTop = '9px';
     bulk.onclick = () => openBulkAddSheet();
+    box.appendChild(bulk);
+    if (contactsSupported()) {
+      const imp = el('button', 'btn btn-block', '📇 استورد من جهات اتصالك');
+      imp.style.marginTop = '9px';
+      imp.onclick = () => openContactImport();
+      box.appendChild(imp);
+    }
     const one = el('button', 'btn btn-ghost btn-block', 'أضِف قريبًا واحدًا');
     one.style.marginTop = '9px';
     one.onclick = () => openAddSheet();
-    box.appendChild(bulk); box.appendChild(one);
+    box.appendChild(one);
     const demo = el('button', 'btn btn-ghost btn-block', '👁️ استعرض بمثال تجريبي');
     demo.style.marginTop = '9px';
     demo.onclick = () => { seedDemo(); toast('بيانات تجريبية — امسحها من «المزيد» متى شئت'); render(); };
@@ -335,6 +342,36 @@ function viewToday(v) {
   /* اللقاء القادم */
   const g = S.activeGathering();
   if (g) v.appendChild(gatheringHero(g));
+
+  /* تذكير النسخة الاحتياطية — البيانات محلية، وضياعها لا يُسترجع.
+     يظهر بعد شجرة معتبرة، وشهرًا بعد آخر تصدير، ويُصرَف بلا إلحاح. */
+  const bk = S.db.settings.backup || {};
+  const sinceBackup = bk.lastExport ? (Date.now() - new Date(bk.lastExport)) / 86400000 : Infinity;
+  const sinceNag = bk.lastNag ? (Date.now() - new Date(bk.lastNag)) / 86400000 : Infinity;
+  if (S.activePeople().length >= 8 && sinceBackup > 30 && sinceNag > 14) {
+    const w = el('div', 'card');
+    w.style.cssText = 'border-color:var(--gold);margin-bottom:16px';
+    w.innerHTML = `<div style="display:flex;gap:11px;align-items:flex-start">
+        <span style="font-size:22px">💾</span>
+        <div class="pc-main">
+          <div class="pc-name" style="font-size:15px">${bk.lastExport ? 'مضى شهر على آخر نسخة' : 'احفظ نسخة من شجرتك'}</div>
+          <p class="muted" style="margin-top:3px">بياناتك على هذا الجهاز وحده. مسحُ بيانات المتصفح أو تغيير الجهاز يضيّعها، والتصدير ثانيتان.</p>
+        </div></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-gold" style="flex:1" data-export>⬇️ صدّر الآن</button>
+        <button class="btn btn-ghost" data-later style="flex:none;padding:12px 16px">لاحقًا</button>
+      </div>`;
+    w.querySelector('[data-export]').onclick = () => {
+      S.exportJSON();
+      S.db.settings.backup = { ...bk, lastExport: new Date().toISOString() };
+      S.save(); toast('نُزِّلت النسخة — احتفظ بها'); render();
+    };
+    w.querySelector('[data-later]').onclick = () => {
+      S.db.settings.backup = { ...bk, lastNag: new Date().toISOString() };
+      S.save(); render();
+    };
+    v.appendChild(w);
+  }
 
   /* نيّة الصلح — واحدٌ فقط، ومرة كل أسبوع */
   const rift = S.riftNudge();
@@ -431,6 +468,7 @@ function suggestionCard(p, s) {
     <div class="sug-actions">
       ${p.phone ? `<a class="btn btn-primary" href="tel:${esc(p.phone)}" data-call>📞 اتصل الآن</a>` : `<button class="btn btn-primary" data-log>✔️ سجّل صلة</button>`}
       <button class="btn" data-open>التفاصيل</button>
+      <button class="btn btn-ghost" data-snooze aria-label="أجّله أسبوعًا" title="أجّله أسبوعًا" style="flex:none;min-width:48px;padding:12px 14px">⏱</button>
     </div>`;
 
   const callBtn = c.querySelector('[data-call]');
@@ -438,6 +476,12 @@ function suggestionCard(p, s) {
   const logBtn = c.querySelector('[data-log]');
   if (logBtn) logBtn.onclick = () => openLogSheet(p);
   c.querySelector('[data-open]').onclick = () => go('person', p.id);
+  c.querySelector('[data-snooze]').onclick = () => {
+    S.snooze(p.id, 7); haptic();
+    toast(`أُجّل ${p.name.split(/\s+/)[0]} أسبوعًا — حرارته لم تتغيّر`,
+      () => { S.unsnooze(p.id); toast('أُلغي التأجيل'); render(); });
+    render();
+  };
   return c;
 }
 
@@ -729,6 +773,22 @@ function viewPerson(v, id) {
     </div>
     ${rel.notRahim ? '<div class="hint" style="margin-top:9px">ملاحظة: هذه القرابة ليست من الرحم المحرَّم، وأُدرجت للتذكير بالإحسان والصلة.</div>' : ''}`;
   v.appendChild(head);
+
+  /* التأجيل يجب أن يكون مرئيًا وقابلًا للإلغاء، لا اختفاءً صامتًا */
+  if (S.isSnoozed(p)) {
+    const days = Math.max(1, Math.ceil((new Date(p.snoozeUntil) - Date.now()) / 86400000));
+    const sn = el('div', 'card');
+    sn.style.cssText = 'margin-top:10px;border-color:var(--gold)';
+    sn.innerHTML = `<div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">⏱</span>
+      <span class="pc-main"><span class="pc-name" style="font-size:14px">مؤجَّل ${esc(arDays(days))}</span>
+        <span class="pc-rel">لا يظهر في اقتراحات اليوم — وحرارته لم تتغيّر</span></span>
+      <button class="btn btn-ghost" data-unsnooze style="flex:none;padding:10px 14px">ألغِ</button></div>`;
+    sn.querySelector('[data-unsnooze]').onclick = () => {
+      S.unsnooze(p.id); toast('أُلغي التأجيل'); render();
+    };
+    v.appendChild(sn);
+  }
 
   /* اتصال سريع */
   if (p.phone) {
@@ -1081,6 +1141,128 @@ function openWizard() {
 }
 
 /* ══════════════════════════════════════════════════
+   الاستيراد من جهات الاتصال
+   كتابة ٣٠ رقمًا يدويًا أكبر عائق بعد الأسماء. Contact Picker
+   يعطي الاسم والرقم من دفتر الهاتف — كروم/أندرويد فقط، ولا يصل
+   التطبيق إلى شيء لم يخترْه المستخدم بنفسه في نافذة النظام.
+   ══════════════════════════════════════════════════ */
+const contactsSupported = () =>
+  'contacts' in navigator && 'ContactsManager' in window &&
+  typeof navigator.contacts.select === 'function';
+
+/* أرقام دفتر الهاتف تأتي بمسافات وشُرَط ورموز — تُنظَّف ويُوحَّد المفتاح */
+function cleanPhone(t) {
+  return String(t || '').replace(/[^\d+]/g, '').replace(/^00/, '+');
+}
+
+function openContactImport(preRel) {
+  if (!contactsSupported()) {
+    openSheet(`
+      <h3>الاستيراد من جهات الاتصال</h3>
+      <p class="sheet-sub">هذه الميزة يتيحها المتصفح على <b>أندرويد مع كروم</b> فقط. جهازك أو متصفحك لا يدعمها.</p>
+      <div class="card muted" style="margin-bottom:13px">
+        آبل لا تتيح للمواقع قراءة جهات الاتصال إطلاقًا، فلا توجد طريقة لتشغيلها على آيفون.
+      </div>
+      <button class="btn btn-primary btn-lg" id="c-bulk">⚡ أضِفهم دفعة واحدة بدلًا من ذلك</button>
+      <button class="btn btn-ghost btn-block" data-close style="margin-top:9px">إغلاق</button>`,
+      b => b.querySelector('#c-bulk').onclick = () => { closeSheet(); openBulkAddSheet(preRel); });
+    return;
+  }
+
+  let relKey = preRel || null;
+  openSheet(`
+    <h3>الاستيراد من جهات الاتصال</h3>
+    <p class="sheet-sub">اختر صلة القرابة، ثم اختر من دفتر هاتفك. لن يصل التطبيق إلا إلى من تحدّده أنت.</p>
+
+    <div style="font-size:13px;font-weight:800;color:var(--ink-2);margin:4px 0 9px">صلة القرابة *</div>
+    ${R.REL_PICKER.map(g => `
+      <div class="relgrp"><h4>${g.title}</h4><div class="relchips">
+        ${g.keys.map(k => `<button class="relchip" data-rel="${k}" aria-pressed="${relKey === k}">${R.REL_MAP[k].label}</button>`).join('')}
+      </div></div>`).join('')}
+
+    <button class="btn btn-primary btn-lg" id="c-pick" style="margin-top:6px" disabled>📇 اختر من جهات الاتصال</button>
+    <div class="hint">تفتح نافذة النظام، وتختار منها ما تشاء — والتطبيق لا يرى سواه.</div>`,
+    b => {
+      const pick = b.querySelector('#c-pick');
+      b.querySelectorAll('[data-rel]').forEach(x => x.onclick = () => {
+        relKey = x.dataset.rel;
+        b.querySelectorAll('[data-rel]').forEach(y => y.setAttribute('aria-pressed', y === x));
+        pick.disabled = false;
+      });
+      if (relKey) pick.disabled = false;
+
+      pick.onclick = async () => {
+        let picked;
+        try {
+          picked = await navigator.contacts.select(['name', 'tel'], { multiple: true });
+        } catch (e) {
+          return failSheet('تعذّر فتح جهات الاتصال. تأكّد أنك تستخدم كروم على أندرويد وأن الصفحة مفتوحة مباشرة لا داخل إطار.');
+        }
+        if (!picked || !picked.length) return;      /* أُلغي الاختيار */
+        openContactReview(picked, relKey);
+      };
+    });
+}
+
+/* مراجعة قبل الإضافة: أسماء الدفتر فيها «أبو محمد الجوال» وأرقام مكرّرة */
+function openContactReview(raw, relKey) {
+  const rows = raw.map((c, i) => {
+    const name = (c.name && c.name[0] ? String(c.name[0]) : '').trim();
+    const tel = cleanPhone(c.tel && c.tel[0]);
+    const dupName = name ? S.findDuplicates(name, relKey).length > 0 : false;
+    const dupPhone = tel ? S.activePeople().some(p => cleanPhone(p.phone) && cleanPhone(p.phone) === tel) : false;
+    return { i, name, tel, dup: dupName || dupPhone };
+  }).filter(r => r.name || r.tel);
+
+  const fresh = rows.filter(r => !r.dup);
+  const dups = rows.filter(r => r.dup);
+  const picked = new Set(fresh.map(r => r.i));
+
+  openSheet(`
+    <h3>راجِع قبل الإضافة</h3>
+    <p class="sheet-sub">الجميع سيُضاف بصلة <b>${esc(R.REL_MAP[relKey].label)}</b>. ألغِ تحديد من لا تريده، وعدّل الأسماء بعد الإضافة متى شئت.</p>
+    ${dups.length ? `<div class="card muted" style="margin-bottom:12px">⚠️ ${esc(arPeople(dups.length))} عندك بالفعل — استُبعدوا تلقائيًا، ويمكنك تحديدهم يدويًا.</div>` : ''}
+    <div class="guestbox">
+      ${rows.map(r => `
+        <button class="guest" type="button" data-c="${r.i}" aria-pressed="${!r.dup}">
+          <span class="avatar" style="--av:${avatarColor(String(r.i) + r.name)}">${esc(initials(r.name) || '؟')}</span>
+          <span class="guest-n">${esc(r.name || 'بلا اسم')}
+            <span dir="ltr" style="text-align:right">${esc(r.tel || 'بلا رقم')}${r.dup ? ' · موجود عندك' : ''}</span></span>
+          <span class="guest-c">✓</span></button>`).join('')}
+    </div>
+    <div class="hint" id="c-count" style="margin-top:11px"></div>
+    <button class="btn btn-primary btn-lg" id="c-save" style="margin-top:6px"></button>`,
+    b => {
+      const cnt = b.querySelector('#c-count');
+      const save = b.querySelector('#c-save');
+      const refresh = () => {
+        cnt.textContent = picked.size ? `${arPeople(picked.size)} سيُضافون` : 'لم تختر أحدًا';
+        save.textContent = picked.size ? `أضِف ${arPeople(picked.size)}` : 'أضِفهم';
+        save.disabled = !picked.size;
+      };
+      b.querySelectorAll('[data-c]').forEach(x => x.onclick = () => {
+        const i = Number(x.dataset.c);
+        picked.has(i) ? picked.delete(i) : picked.add(i);
+        x.setAttribute('aria-pressed', picked.has(i));
+        refresh();
+      });
+      refresh();
+
+      save.onclick = () => {
+        let added = 0;
+        rows.filter(r => picked.has(r.i)).forEach(r => {
+          const name = r.name || r.tel;
+          S.addPerson({ name, relation: relKey, phone: r.tel });
+          added++;
+        });
+        haptic(); closeSheet();
+        toast(`أُضيف ${arPeople(added)} من جهات اتصالك 🌿`);
+        render();
+      };
+    });
+}
+
+/* ══════════════════════════════════════════════════
    الإضافة الجماعية
    العائق الأكبر أمام أي مستخدم جديد: بناء شجرة من ٢٥ اسمًا
    عبر نموذج يُملأ مرة لكل شخص. هنا تُختار القرابة مرة واحدة
@@ -1199,7 +1381,8 @@ function openAddSheet(existing) {
     <button class="btn btn-primary btn-lg" id="f-save">${isEdit ? 'حفظ التعديلات' : 'إضافة القريب'}</button>
     ${isEdit ? '' : `
       <button class="btn btn-ghost btn-block" id="f-save-more" style="margin-top:9px">حفظ وإضافة آخر</button>
-      <button class="btn btn-ghost btn-block" id="f-bulk" style="margin-top:9px;color:var(--green)">⚡ عندك كثير؟ أضِفهم دفعة واحدة</button>`}
+      <button class="btn btn-ghost btn-block" id="f-bulk" style="margin-top:9px;color:var(--green)">⚡ عندك كثير؟ أضِفهم دفعة واحدة</button>
+      <button class="btn btn-ghost btn-block" id="f-contacts" style="margin-top:4px;color:var(--green)">📇 أو استورد من جهات اتصالك</button>`}
   `, body => {
     const cadSel = body.querySelector('#f-cad');
     const hint = body.querySelector('#cadhint');
@@ -1243,6 +1426,8 @@ function openAddSheet(existing) {
     };
     const bulk = body.querySelector('#f-bulk');
     if (bulk) bulk.onclick = () => { closeSheet(); openBulkAddSheet(relKey); };
+    const imp = body.querySelector('#f-contacts');
+    if (imp) imp.onclick = () => { closeSheet(); openContactImport(relKey); };
 
     const more = body.querySelector('#f-save-more');
     if (more) more.onclick = () => {
@@ -2517,7 +2702,12 @@ function viewBackup(v) {
 
   const exp = el('button', 'btn btn-primary btn-lg', '⬇️ تصدير نسخة احتياطية');
   exp.style.marginTop = '12px';
-  exp.onclick = () => { S.exportJSON(); toast('نُزِّل الملف'); };
+  exp.onclick = () => {
+    S.exportJSON();
+    S.db.settings.backup = { ...(S.db.settings.backup || {}), lastExport: new Date().toISOString() };
+    S.save();
+    toast('نُزِّل الملف — احتفظ به في مكان آمن');
+  };
   v.appendChild(exp);
 
   const lbl = el('label', 'btn btn-lg', '⬆️ استيراد من ملف');
@@ -2601,6 +2791,10 @@ function boot() {
     });
   }
 
+  /* اختصارات أيقونة التطبيق: ?go=… تفتح الوجهة مباشرة */
+  const dest = new URLSearchParams(location.search).get('go');
+  const DEST = { today: 'today', people: 'people', tree: 'tree', log: 'today' };
+
   const needsOnboard = !S.db.settings.myName && S.db.people.length === 0;
   $('#onboard').hidden = !needsOnboard;
   if (needsOnboard) {
@@ -2613,7 +2807,14 @@ function boot() {
     $('#ob-start').onclick = start;
     $('#ob-name').onkeydown = e => { if (e.key === 'Enter') start(); };
   }
-  go('today');
+
+  go(DEST[dest] || 'today');
+  /* لا يبقى ?go= في الشريط فيعيد الفتح على الوجهة نفسها بعد التنقّل */
+  if (dest) history.replaceState(null, '', location.pathname);
+  if (dest === 'log' && !needsOnboard) {
+    const first = S.suggestions(1)[0];
+    if (first) setTimeout(() => openLogSheet(first.p), 350);
+  }
 }
 
 boot();

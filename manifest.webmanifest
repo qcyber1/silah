@@ -18,6 +18,23 @@
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "من يستحق صلتي اليوم", "url": "/", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "مَن يستحق صلتي اليوم",
+      "short_name": "اليوم",
+      "url": "/?go=today",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "سجّل صلة",
+      "short_name": "سجّل",
+      "url": "/?go=log",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "أرحامي",
+      "short_name": "أرحامي",
+      "url": "/?go=people",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

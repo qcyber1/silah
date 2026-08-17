@@ -213,10 +213,27 @@ function priorityOf(person) {
   return (overdue + 0.05) * tierWeight;
 }
 
+/* التأجيل: قريبٌ مسافرٌ أو متعذّرٌ الوصول إليه يظلّ يُقترح كل يوم بلا فائدة،
+   فيُسكَت أسبوعًا دون أن يُحسب موصولًا — حرارته تبقى كما هي. */
+const isSnoozed = p => p.snoozeUntil && new Date(p.snoozeUntil) > new Date();
+
+function snooze(personId, days = 7) {
+  const p = getPerson(personId);
+  if (!p) return null;
+  p.snoozeUntil = new Date(Date.now() + days * DAY).toISOString();
+  save();
+  return p.snoozeUntil;
+}
+
+function unsnooze(personId) {
+  const p = getPerson(personId);
+  if (p) { p.snoozeUntil = null; save(); }
+}
+
 /* أصحاب الجفوة لا يظهرون هنا — لهم مسارهم ونبرتهم */
 function suggestions(limit = 3) {
   return activePeople()
-    .filter(p => !hasRift(p))
+    .filter(p => !hasRift(p) && !isSnoozed(p))
     .map(p => ({ p, s: statusOf(p), pr: priorityOf(p) }))
     .filter(x => x.s.state !== 'warm')
     .sort((a, b) => b.pr - a.pr)
@@ -578,6 +595,7 @@ window.STORE = {
   addPerson, updatePerson, deletePerson, getPerson, activePeople,
   addEvent, deleteEvent, eventsOf, lastContact, lastDua,
   undoable, undoLastEvent, findDuplicates, normalizeName,
+  isSnoozed, snooze, unsnooze,
   statusOf, STATE_META, priorityOf, suggestions,
   upcomingOccasions, monthStats, streakDays,
   REPEATS, addGathering, updateGathering, deleteGathering, getGathering,
