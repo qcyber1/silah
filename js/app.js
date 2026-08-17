@@ -698,8 +698,11 @@ function viewPeople(v) {
 
     let rows = people.map(p => ({ p, s: S.statusOf(p) }));
     if (pQuery.trim()) {
-      const q = pQuery.trim();
-      rows = rows.filter(r => r.p.name.includes(q) || (R.REL_MAP[r.p.relation]?.label || '').includes(q));
+      /* بحثٌ متسامح مع الإملاء: «احمد» يجد «أحمد»، و«حصه» تجد «حصّة» */
+      const q = S.normalizeName(pQuery);
+      rows = rows.filter(r =>
+        S.normalizeName(r.p.name).includes(q) ||
+        S.normalizeName(R.REL_MAP[r.p.relation]?.label || '').includes(q));
     }
     if (pFilter === 'cold') rows = rows.filter(r => r.s.state === 'cold' || r.s.state === 'new');
     else if (pFilter === 'due') rows = rows.filter(r => r.s.state === 'due');
