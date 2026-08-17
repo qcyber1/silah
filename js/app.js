@@ -214,6 +214,24 @@ const sheetOpen = () => !$('#sheet').hidden;
 
 $('#sheet').addEventListener('click', e => { if (e.target.hasAttribute('data-close')) closeSheet(); });
 
+/* لوحة المفاتيح فوق الورقة: --kb = ما تحجبه، فيرتفع المحتوى ولا يُدفَن الحقل */
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const applyKb = () => {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb', kb > 40 ? kb + 'px' : '0px');
+  };
+  vv.addEventListener('resize', applyKb);
+  vv.addEventListener('scroll', applyKb);
+}
+/* والحقل المُركَّز داخل الورقة يُسحب إلى مرأى العين بعد فتح اللوحة */
+$('#sheet').addEventListener('focusin', e => {
+  if (!e.target.matches('input,textarea,select')) return;
+  setTimeout(() => {
+    try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) {}
+  }, 320);
+});
+
 document.addEventListener('keydown', e => {
   if (!sheetOpen()) return;
   if (e.key === 'Escape') { e.preventDefault(); closeSheet(); return; }

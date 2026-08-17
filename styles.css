@@ -390,9 +390,13 @@ a{color:var(--green);text-decoration:none}
 .sheet-backdrop{position:absolute;inset:0;background:rgba(10,20,16,.5);animation:fade .2s}
 .sheet{
   position:relative;width:100%;max-width:760px;margin:0 auto;background:var(--bg);
-  border-radius:24px 24px 0 0;max-height:88vh;overflow-y:auto;box-shadow:var(--sh-up);
-  padding:0 16px calc(20px + var(--safe-b));animation:up .26s cubic-bezier(.2,.8,.25,1)
+  border-radius:24px 24px 0 0;overflow-y:auto;box-shadow:var(--sh-up);
+  /* dvh يتقلّص مع لوحة المفاتيح؛ و--kb يضبطه visualViewport للمتصفحات التي لا تقلّصه */
+  max-height:calc(88dvh - var(--kb,0px));
+  padding:0 16px calc(20px + var(--safe-b) + var(--kb,0px));
+  animation:up .26s cubic-bezier(.2,.8,.25,1)
 }
+@supports not (height:1dvh){ .sheet{max-height:calc(88vh - var(--kb,0px))} }
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
 .sheet-grab{padding:12px 0 8px;display:flex;justify-content:center;position:sticky;top:0;background:var(--bg);z-index:2}
 .sheet-grab::before{content:"";width:42px;height:4.5px;border-radius:9px;background:var(--line)}
